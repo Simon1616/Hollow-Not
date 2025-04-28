@@ -17,6 +17,8 @@ public class RunState : PlayerBaseState
         Debug.Log($"[RunState] Entering Run State at {enterTime:F2}s");
         // Play run sound if needed
         // AudioManager.Instance?.Play("RunSound");
+        if (stateMachine.Animator != null)
+            stateMachine.Animator.Play("Run");
     }
 
     public override void Tick(float deltaTime)

@@ -51,6 +51,7 @@ public class PlayerStateMachine : MonoBehaviour
     // State registry for extensibility
     private Dictionary<string, PlayerBaseState> stateRegistry = new Dictionary<string, PlayerBaseState>();
 
+    private bool isFacingRight = true;
     // Concrete states
     public PlayerIdleState IdleState { get; private set; } // Add IdleState property back
 
@@ -174,6 +175,24 @@ public class PlayerStateMachine : MonoBehaviour
     public Vector2 GetMovementInput()
     {
         // Delegate to the InputReader instance
+
+        if (InputReader.GetMovementInput().x < 0.0f)
+        {
+            isFacingRight = false;
+        }
+        else if (InputReader.GetMovementInput().x > 0.0f)
+        {
+            isFacingRight = true;
+        }
+        if (isFacingRight)
+        {
+            transform.rotation = Quaternion.Euler(0, 0, 0);
+        }
+        else
+        {
+            transform.rotation = Quaternion.Euler(0, 180f, 0);
+        }
+        
         return InputReader.GetMovementInput();
     }
 

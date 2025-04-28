@@ -13,7 +13,7 @@ public class InputReader
 
         // Only use horizontal input for walking/running
         Vector2 input = new Vector2(horizontal, 0f);
-
+        
         // Normalization might not be strictly necessary anymore with only one axis,
         // but doesn't hurt to keep if other inputs could be added later.
         // if (input.sqrMagnitude > 1) // No need to normalize a 1D vector derived this way

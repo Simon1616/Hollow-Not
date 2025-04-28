@@ -19,6 +19,9 @@ public class SlideState : PlayerBaseState
             // If no input, slide in the direction the player was last moving, or default forward
             // This needs refinement based on how movement direction is tracked
             slideDirection = stateMachine.transform.forward; // Placeholder
+
+            if (stateMachine.Animator != null)
+                stateMachine.Animator.Play("Slide");
         }
 
         // Play slide animation

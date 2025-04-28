@@ -2,7 +2,7 @@ using UnityEngine;
 
 public class WalkState : PlayerBaseState
 {
-    private float walkSpeedMultiplier = 0.5f; // Walk is half speed
+    private float walkSpeedMultiplier = 0.95f; // Walk is half speed
     private float enterTime;
 
     public WalkState(PlayerStateMachine stateMachine) : base(stateMachine)

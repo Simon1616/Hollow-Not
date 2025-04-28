@@ -12,6 +12,9 @@ public class ShootState : PlayerBaseState
         // Logic when entering the shoot state (e.g., play animation, aim)
         Debug.Log("Player entered Shoot State");
         // Ctx.Animator.SetBool("IsShooting", true); // Example animation trigger
+
+        if (stateMachine.Animator != null)
+            stateMachine.Animator.Play("Shoot");
     }
 
     public override void Tick(float deltaTime)

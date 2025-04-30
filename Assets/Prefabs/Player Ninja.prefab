@@ -159,19 +159,20 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   <MoveSpeed>k__BackingField: 5
-  <WallJumpForce>k__BackingField: 7.5
+  <WallJumpForce>k__BackingField: 5
   <MaxJumps>k__BackingField: 2
   playerCollider: {fileID: 1779346489392483852}
   standingColliderSize: {x: 1, y: 2}
   standingColliderOffset: {x: 0, y: 0}
   crouchingColliderSize: {x: 1, y: 1}
   crouchingColliderOffset: {x: 0, y: -0.5}
-  standUpCheckDistance: 0.1
+  standUpCheckDistance: 0.025
   groundLayer:
     serializedVersion: 2
     m_Bits: 64
   groundCheckPoint: {fileID: 1200896474919077014}
-  groundCheckRadius: 0.2
+  groundCheckRadius: 0.025
+  JumpForce: 7.5
 --- !u!70 &1779346489392483852
 CapsuleCollider2D:
   m_ObjectHideFlags: 0

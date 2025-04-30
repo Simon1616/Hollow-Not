@@ -6,9 +6,9 @@ public class PlayerIdleState : PlayerBaseState
 
     public override void Enter()
     {
-        // Stop movement if any residual velocity
+        // Stop horizontal movement if any residual velocity
         if (stateMachine.RB != null)
-            stateMachine.RB.linearVelocity = Vector3.zero;
+            stateMachine.RB.linearVelocity = new Vector2(0f, stateMachine.RB.linearVelocity.y);
         // Play Idle Animation (Example)
         // stateMachine.Animator.Play("IdleAnimationName");
         Debug.Log("Entering Idle State");

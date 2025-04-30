@@ -18,11 +18,14 @@ public class FallState : PlayerBaseState
     public override void Tick(float deltaTime)
     {
         // Allow air control
-        Vector2 moveInput = stateMachine.InputReader.GetMovementInput();
+        Vector2 moveInput = stateMachine.GetMovementInput();
         float targetVelocityX = moveInput.x * stateMachine.MoveSpeed;
         if (stateMachine.RB != null)
         {
-            stateMachine.RB.linearVelocity = new Vector2(targetVelocityX, stateMachine.RB.linearVelocity.y);
+            // Calculate the force needed to reach target velocity
+            float currentVelocityX = stateMachine.RB.linearVelocity.x;
+            float forceX = (targetVelocityX - currentVelocityX) * stateMachine.RB.mass;
+            stateMachine.RB.AddForce(new Vector2(forceX, 0f));
         }
 
         // If grounded, transition to Idle/Walk/Run

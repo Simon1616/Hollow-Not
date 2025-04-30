@@ -83,6 +83,13 @@ public class PlayerStateMachine : MonoBehaviour
     // InputReader abstraction (now a separate class)
     public InputReader InputReader { get; private set; } // Public property for states to access
 
+    private float lastDirectionChangeTime = 0f;
+    private const float DIRECTION_CHANGE_DELAY = 0.1f; // 1/10 of a second delay
+
+    public float JumpForce = 10f;
+    public bool IsFacingRight { get; private set; } = true;
+    public PlayerBaseState CurrentState { get; private set; }
+
     private void Awake()
     {
         // Get Components
@@ -163,37 +170,36 @@ public class PlayerStateMachine : MonoBehaviour
 
     public void SwitchState(PlayerBaseState newState)
     {
-        if (currentState == newState) return; // Re-entrancy guard
-        var prevState = currentState;
-        currentState?.Exit();
+        if (newState == null)
+        {
+            Debug.LogError("[PlayerStateMachine] Attempted to switch to a null state!");
+            return;
+        }
+
+        // Exit current state if it exists
+        if (currentState != null)
+        {
+            currentState.Exit();
+        }
+
+        // Switch to new state
         currentState = newState;
-        currentState?.Enter();
-        OnStateChanged?.Invoke(prevState, newState);
-        stateEnterTime = Time.time;
+        CurrentState = newState; // Set the public CurrentState property
+        currentState.Enter();
     }
 
     public Vector2 GetMovementInput()
     {
-        // Delegate to the InputReader instance
-
-        if (InputReader.GetMovementInput().x < 0.0f)
+        Vector2 input = InputReader.GetMovementInput();
+        
+        // Update facing direction based on input
+        if (input.x != 0)
         {
-            isFacingRight = false;
-        }
-        else if (InputReader.GetMovementInput().x > 0.0f)
-        {
-            isFacingRight = true;
-        }
-        if (isFacingRight)
-        {
-            transform.rotation = Quaternion.Euler(0, 0, 0);
-        }
-        else
-        {
-            transform.rotation = Quaternion.Euler(0, 180f, 0);
+            IsFacingRight = input.x > 0;
+            transform.localScale = new Vector3(IsFacingRight ? 1 : -1, 1, 1);
         }
         
-        return InputReader.GetMovementInput();
+        return input;
     }
 
     public bool IsRunPressed()

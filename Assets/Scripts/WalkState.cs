@@ -74,9 +74,15 @@ public class WalkState : PlayerBaseState
             return;
         }
 
-        // Apply walk movement (only affect horizontal velocity)
+        // Apply walk movement (reduced speed, only affect horizontal velocity)
         float targetVelocityX = moveInput.x * stateMachine.MoveSpeed * walkSpeedMultiplier;
-        stateMachine.RB.linearVelocity = new Vector2(targetVelocityX, stateMachine.RB.linearVelocity.y); // Preserve Y velocity
+        if (stateMachine.RB != null)
+        {
+            // Calculate the force needed to reach target velocity
+            float currentVelocityX = stateMachine.RB.linearVelocity.x;
+            float forceX = (targetVelocityX - currentVelocityX) * stateMachine.RB.mass;
+            stateMachine.RB.AddForce(new Vector2(forceX, 0f));
+        }
 
         // Optionally update animation direction
         if (stateMachine.Animator != null)

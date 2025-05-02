@@ -24,9 +24,10 @@ public class PlayerStateMachine : MonoBehaviour
     // --- Coyote time (grounded grace period) ---
     private float jumpGroundedGraceTimer = 0f;
     private const float jumpGroundedGraceDuration = 0.10f; // 0.1 seconds of grace after jumping
-    [field: SerializeField] public float MoveSpeed { get; private set; } = 5f; // Example speed
+    [field: SerializeField] public float MoveSpeed { get; private set; } = 5f;
+    [field: SerializeField] public float AirSpeed { get; private set; } = 3f; // Lower speed for air control
     [field: SerializeField] public float WallJumpForce { get; private set; } = 7.5f;
-    [field: SerializeField] public int MaxJumps { get; private set; } = 2; // 1 = no double jump, 2 = double jump
+    [field: SerializeField] public int MaxJumps { get; private set; } = 1;
     public int JumpsRemaining { get; set; }
 
     [Header("Collider Settings")]
@@ -45,6 +46,33 @@ public class PlayerStateMachine : MonoBehaviour
     [Header("Crouch Settings")]
     [SerializeField] public float CrouchSpeedMultiplier { get; private set; } = 0.25f; // Half of WalkState's 0.5 multiplier
 
+    [Header("Movement Deceleration")]
+    [SerializeField] private float groundedDecelerationX = 20f;
+    [SerializeField] private float airborneDecelerationX = 10f;
+    [SerializeField] private float groundedDecelerationY = 30f;
+    [SerializeField] private float airborneDecelerationY = 15f;
+    [SerializeField] private float airborneDecelerationYDown = 10f; // Lower deceleration when falling
+
+    [Header("Max Speeds")]
+    [SerializeField] private float maxHorizontalSpeed = 10f;
+    [SerializeField] private float maxVerticalSpeed = 15f;
+    [SerializeField] private float maxFallSpeed = 20f;
+
+    [Header("Jump Settings")]
+    [SerializeField] private float jumpCooldown = 0.67f; // 2/3 of a second
+    private float lastJumpTime = 0f;
+
+    [Header("Dash Settings")]
+    [SerializeField] private float dashSpeed = 20f;
+    [SerializeField] private float dashDuration = 0.1f;
+    private float dashEndTime;
+    private bool isDashing;
+    private float dashDirection;
+
+    public float GetDecelerationX(bool isGrounded) => isGrounded ? groundedDecelerationX : airborneDecelerationX;
+    public float GetDecelerationY(bool isGrounded, bool isMovingUp) => isGrounded ? groundedDecelerationY : (isMovingUp ? airborneDecelerationY : airborneDecelerationYDown);
+
+    public float GetHorizontalSpeed(bool isGrounded, bool isWallClinging) => isGrounded ? MoveSpeed : (isWallClinging ? MoveSpeed * 0.5f : AirSpeed);
 
     private PlayerBaseState currentState;
 
@@ -161,7 +189,7 @@ public class PlayerStateMachine : MonoBehaviour
         if (!wasGroundedLastFrame && isGroundedNow)
         {
             // Landed this frame, reset jumps
-            JumpsRemaining = Mathf.Max(0, MaxJumps - 1);
+            JumpsRemaining = MaxJumps;
         }
         wasGroundedLastFrame = isGroundedNow;
 
@@ -279,4 +307,75 @@ public class PlayerStateMachine : MonoBehaviour
         return hit == null; // Can stand up if nothing is hit
     }
 
+    public void ClampVelocity(Rigidbody2D rb)
+    {
+        if (rb == null) return;
+        
+        Vector2 velocity = rb.linearVelocity;
+        
+        // Clamp horizontal velocity
+        velocity.x = Mathf.Clamp(velocity.x, -maxHorizontalSpeed, maxHorizontalSpeed);
+        
+        // Clamp vertical velocity - different limits for up and down
+        if (velocity.y > 0)
+        {
+            velocity.y = Mathf.Min(velocity.y, maxVerticalSpeed);
+        }
+        else
+        {
+            velocity.y = Mathf.Max(velocity.y, -maxFallSpeed);
+        }
+        
+        rb.linearVelocity = velocity;
+    }
+
+    public bool CanJump()
+    {
+        return Time.time >= lastJumpTime + jumpCooldown;
+    }
+
+    public void OnJump()
+    {
+        lastJumpTime = Time.time;
+    }
+
+    public void StartDash(float direction)
+    {
+        isDashing = true;
+        dashDirection = direction;
+        dashEndTime = Time.time + dashDuration;
+        // Set velocity directly to dash speed, ignoring drag
+        RB.linearVelocity = new Vector2(direction * dashSpeed, 0f);
+        // Disable drag during dash
+        RB.linearDamping = 0f;
+    }
+
+    public void EndDash()
+    {
+        isDashing = false;
+        // Restore normal drag
+        RB.linearDamping = 1f;
+        
+        if (InputReader.GetMovementInput().x * dashDirection <= 0)
+        {
+            // If not moving in dash direction, set to 0
+            RB.linearVelocity = new Vector2(0f, RB.linearVelocity.y);
+        }
+        else
+        {
+            // If still moving in dash direction, set to normal speed
+            float normalSpeed = GetHorizontalSpeed(IsGrounded(), IsTouchingWall() && RB.linearVelocity.y <= 0);
+            RB.linearVelocity = new Vector2(dashDirection * normalSpeed, RB.linearVelocity.y);
+        }
+    }
+
+    public bool IsDashing()
+    {
+        return isDashing;
+    }
+
+    public bool CanDash()
+    {
+        return !isDashing;
+    }
 }

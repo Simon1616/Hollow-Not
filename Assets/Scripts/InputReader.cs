@@ -34,6 +34,11 @@ public class InputReader
         return Input.GetButtonDown("Jump");
     }
 
+    public bool IsJumpHeld()
+    {
+        return Input.GetButton("Jump");
+    }
+
     public bool IsCrouchHeld()
     {
         // Use GetKey for continuous check while held
@@ -47,5 +52,10 @@ public class InputReader
         // Assumes a "Fire1" button is defined (default is Left Ctrl/Mouse 0)
         return Input.GetButtonDown("Fire1");
         // If you want continuous fire while held, use GetButton("Fire1")
+    }
+
+    public bool IsDashPressed()
+    {
+        return Input.GetButtonDown("Fire2");
     }
 }

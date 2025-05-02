@@ -19,14 +19,33 @@ public class FallState : PlayerBaseState
     {
         // Allow air control
         Vector2 moveInput = stateMachine.GetMovementInput();
-        float targetVelocityX = moveInput.x * stateMachine.MoveSpeed;
+        float targetVelocityX = moveInput.x * stateMachine.GetHorizontalSpeed(
+            stateMachine.IsGrounded(),
+            stateMachine.IsTouchingWall() && stateMachine.RB.linearVelocity.y <= 0
+        );
+        
+        // Calculate deceleration force
+        float decelerationX = stateMachine.GetDecelerationX(stateMachine.IsGrounded());
+        float currentVelocityX = stateMachine.RB.linearVelocity.x;
+        float forceX = (targetVelocityX - currentVelocityX) * decelerationX;
+        
+        // Apply horizontal movement with deceleration
         if (stateMachine.RB != null)
         {
-            // Calculate the force needed to reach target velocity
-            float currentVelocityX = stateMachine.RB.linearVelocity.x;
-            float forceX = (targetVelocityX - currentVelocityX) * stateMachine.RB.mass;
             stateMachine.RB.AddForce(new Vector2(forceX, 0f));
         }
+
+        // Apply vertical deceleration
+        float decelerationY = stateMachine.GetDecelerationY(
+            stateMachine.IsGrounded(),
+            stateMachine.RB.linearVelocity.y > 0
+        );
+        float currentVelocityY = stateMachine.RB.linearVelocity.y;
+        float forceY = -currentVelocityY * decelerationY;
+        stateMachine.RB.AddForce(new Vector2(0f, forceY));
+
+        // Clamp velocity to max speeds
+        stateMachine.ClampVelocity(stateMachine.RB);
 
         // If grounded, transition to Idle/Walk/Run
         if (stateMachine.IsGrounded())
@@ -48,11 +67,22 @@ public class FallState : PlayerBaseState
             return;
         }
 
-        // Allow jump if jumps remain (double jump)
-        while (stateMachine.InputReader.IsJumpPressed() && stateMachine.JumpsRemaining > 0)
+        // Check for Dash input
+        if (stateMachine.InputReader.IsDashPressed() && stateMachine.CanDash())
+        {
+            float direction = Mathf.Sign(moveInput.x);
+            if (direction != 0)
+            {
+                stateMachine.StartDash(direction);
+                return;
+            }
+        }
+
+        // Check for Jump input (only on button press for double jumps)
+        if (stateMachine.InputReader.IsJumpPressed() && stateMachine.JumpsRemaining > 0 && stateMachine.CanJump())
         {
             stateMachine.SwitchState(stateMachine.JumpState);
-            return;
+            return; // Exit early after state switch
         }
 
         // Allow shooting in air

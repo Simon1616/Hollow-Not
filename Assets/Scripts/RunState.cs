@@ -13,12 +13,10 @@ public class RunState : PlayerBaseState
         enterTime = Time.time;
         // Play run animation
         if (stateMachine.Animator != null)
-            stateMachine.Animator.Play("Run");
+            stateMachine.Animator.Play("Dash");
         Debug.Log($"[RunState] Entering Run State at {enterTime:F2}s");
         // Play run sound if needed
         // AudioManager.Instance?.Play("RunSound");
-        if (stateMachine.Animator != null)
-            stateMachine.Animator.Play("Run");
     }
 
     public override void Tick(float deltaTime)
@@ -55,8 +53,19 @@ public class RunState : PlayerBaseState
             return; // Exit early after state switch
         }
 
+        // Check for Dash input
+        if (stateMachine.InputReader.IsDashPressed() && stateMachine.CanDash())
+        {
+            float direction = Mathf.Sign(moveInput.x);
+            if (direction != 0)
+            {
+                stateMachine.StartDash(direction);
+                return;
+            }
+        }
+
         // Check for Jump input
-        if (stateMachine.InputReader.IsJumpPressed() && stateMachine.JumpsRemaining > 0)
+        if (stateMachine.InputReader.IsJumpHeld() && stateMachine.JumpsRemaining > 0 && stateMachine.CanJump())
         {
             stateMachine.SwitchState(stateMachine.JumpState);
             return; // Exit early after state switch
@@ -79,14 +88,32 @@ public class RunState : PlayerBaseState
         }
 
         // Apply run movement (full speed, only affect horizontal velocity)
-        float targetVelocityX = moveInput.x * stateMachine.MoveSpeed;
+        float targetVelocityX = moveInput.x * stateMachine.GetHorizontalSpeed(
+            stateMachine.IsGrounded(),
+            stateMachine.IsTouchingWall() && stateMachine.RB.linearVelocity.y <= 0
+        );
         if (stateMachine.RB != null)
         {
-            // Calculate the force needed to reach target velocity
+            // Calculate deceleration force
+            float decelerationX = stateMachine.GetDecelerationX(stateMachine.IsGrounded());
             float currentVelocityX = stateMachine.RB.linearVelocity.x;
-            float forceX = (targetVelocityX - currentVelocityX) * stateMachine.RB.mass;
+            float forceX = (targetVelocityX - currentVelocityX) * decelerationX;
+            
+            // Apply horizontal movement with deceleration
             stateMachine.RB.AddForce(new Vector2(forceX, 0f));
         }
+
+        // Apply vertical deceleration
+        float decelerationY = stateMachine.GetDecelerationY(
+            stateMachine.IsGrounded(),
+            stateMachine.RB.linearVelocity.y > 0
+        );
+        float currentVelocityY = stateMachine.RB.linearVelocity.y;
+        float forceY = -currentVelocityY * decelerationY;
+        stateMachine.RB.AddForce(new Vector2(0f, forceY));
+
+        // Clamp velocity to max speeds
+        stateMachine.ClampVelocity(stateMachine.RB);
 
         // Optionally update animation direction
         if (stateMachine.Animator != null)

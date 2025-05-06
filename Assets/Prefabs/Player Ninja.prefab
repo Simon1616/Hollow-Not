@@ -158,8 +158,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cffec91aed31c4c3b8a77c6630e5d50c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  <MoveSpeed>k__BackingField: 9
-  <AirSpeed>k__BackingField: 8
+  <MoveSpeed>k__BackingField: 7
+  <AirControlSpeed>k__BackingField: 6
   <WallJumpForce>k__BackingField: 23
   <MaxJumps>k__BackingField: 1
   playerCollider: {fileID: 1779346489392483852}
@@ -173,7 +173,10 @@ MonoBehaviour:
     m_Bits: 64
   groundCheckPoint: {fileID: 1200896474919077014}
   groundCheckRadius: 0.1
-  groundedDecelerationX: 1
+  groundCheckOffset: 0
+  wallCheckDistance: 0.02
+  wallCheckOffset: 0
+  groundedDecelerationX: 1.9
   airborneDecelerationX: 1.7
   groundedDecelerationY: 1
   airborneDecelerationY: 1
@@ -181,8 +184,10 @@ MonoBehaviour:
   maxHorizontalSpeed: 20
   maxVerticalSpeed: 30
   maxFallSpeed: 30
-  jumpCooldown: 0.2
-  JumpForce: 19
+  jumpCooldown: 0.15
+  dashSpeed: 20
+  dashDuration: 0.1
+  JumpForce: 17.95
 --- !u!70 &1779346489392483852
 CapsuleCollider2D:
   m_ObjectHideFlags: 0

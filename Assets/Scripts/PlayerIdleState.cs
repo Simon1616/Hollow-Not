@@ -41,13 +41,6 @@ public class PlayerIdleState : PlayerBaseState
             return; // Exit early
         }
 
-        // Check for Crouch input if grounded
-        if (stateMachine.IsGrounded() && stateMachine.InputReader.IsCrouchHeld()) // Use InputReader property
-        {
-            stateMachine.SwitchState(stateMachine.CrouchState);
-            return; // Exit early after state switch
-        }
-
         // Check for Jump input
         if (stateMachine.InputReader.IsJumpPressed())
         {
@@ -56,7 +49,6 @@ public class PlayerIdleState : PlayerBaseState
             stateMachine.SwitchState(stateMachine.JumpState);
             return;
         }
-
 
         // Check for movement input to transition to Walk/Run
         Vector2 moveInput = stateMachine.InputReader.GetMovementInput(); // Use InputReader property

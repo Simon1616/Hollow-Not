@@ -45,13 +45,6 @@ public class WalkState : PlayerBaseState
 
         Vector2 moveInput = stateMachine.GetMovementInput();
 
-        // Check for Crouch input if grounded
-        if (stateMachine.IsGrounded() && stateMachine.InputReader.IsCrouchHeld()) // Use InputReader property
-        {
-            stateMachine.SwitchState(stateMachine.CrouchState);
-            return; // Exit early after state switch
-        }
-
         // Check for Dash input
         if (stateMachine.InputReader.IsDashPressed() && stateMachine.CanDash())
         {

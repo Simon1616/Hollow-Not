@@ -44,15 +44,6 @@ public class RunState : PlayerBaseState
 
         Vector2 moveInput = stateMachine.InputReader.GetMovementInput(); // Use InputReader property
 
-        // Walk/Run toggle
-        // Check for Crouch input FIRST if grounded
-        // Check for Slide input FIRST if grounded and moving
-        if (stateMachine.IsGrounded() && stateMachine.InputReader.IsCrouchHeld()) // Use InputReader property
-        {
-            stateMachine.SwitchState(stateMachine.SlideState); // Transition to SlideState
-            return; // Exit early after state switch
-        }
-
         // Check for Dash input
         if (stateMachine.InputReader.IsDashPressed() && stateMachine.CanDash())
         {
@@ -70,7 +61,6 @@ public class RunState : PlayerBaseState
             stateMachine.SwitchState(stateMachine.JumpState);
             return; // Exit early after state switch
         }
-
 
         if (stateMachine.InputReader.IsRunPressed()) {
             stateMachine.SwitchState(stateMachine.RunState);

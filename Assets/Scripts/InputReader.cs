@@ -39,13 +39,6 @@ public class InputReader
         return Input.GetButton("Jump");
     }
 
-    public bool IsCrouchHeld()
-    {
-        // Use GetKey for continuous check while held
-        // Consider making the key configurable
-        return Input.GetKey(KeyCode.C);
-    }
-
     public bool IsShootPressed()
     {
         // Use GetButtonDown for single fire per press

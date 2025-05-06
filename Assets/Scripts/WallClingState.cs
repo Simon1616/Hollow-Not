@@ -2,32 +2,49 @@ using UnityEngine;
 
 public class WallClingState : PlayerBaseState
 {
-    private float slideSpeed = 1.5f; // Adjust this value for desired slide speed
-    private float enterTime;
-    private bool jumpHeldOnEnter;
+    [Header("Wall Cling Settings")]
+    [SerializeField] private float slideSpeed = 2f;
+    [SerializeField] private float wallSnapDistance = 0.1f;
+    [SerializeField] private float wallSnapSpeed = 20f;
+    [SerializeField] private float wallClingHorizontalSpeedMultiplier = 0.5f;
 
-    public WallClingState(PlayerStateMachine stateMachine) : base(stateMachine) { }
+    private bool jumpHeldOnEnter = false;
+
+    public WallClingState(PlayerStateMachine stateMachine) : base(stateMachine)
+    {
+    }
 
     public override void Enter()
     {
-        enterTime = Time.time;
-        // Reset jumps when starting to wall cling
-        stateMachine.JumpsRemaining = stateMachine.MaxJumps;
+        // Store if jump was held when entering state
         jumpHeldOnEnter = stateMachine.InputReader.IsJumpPressed();
-        Debug.Log($"[WallClingState] Entering Wall Cling State at {enterTime:F2}s");
-
+        
+        // Play wall cling animation if available
         if (stateMachine.Animator != null)
             stateMachine.Animator.Play("Cling");
+            
+        // Immediately snap to wall
+        float direction = stateMachine.IsFacingRight ? 1f : -1f;
+        RaycastHit2D hit = Physics2D.Raycast(
+            stateMachine.RB.position,
+            new Vector2(direction, 0),
+            wallSnapDistance,
+            stateMachine.groundLayer
+        );
 
-        // Optional: Play wall cling animation
-        // if (stateMachine.Animator != null)
-        //     stateMachine.Animator.Play("WallClingAnimation"); // Replace with your animation name
-
-        // Reduce initial vertical velocity slightly to make the cling feel better
-        if (stateMachine.RB != null)
+        if (hit.collider != null)
         {
-            stateMachine.RB.linearVelocity = new Vector2(stateMachine.RB.linearVelocity.x, Mathf.Clamp(stateMachine.RB.linearVelocity.y, -slideSpeed, float.MaxValue));
+            // Calculate target position (snapped to wall)
+            Vector2 targetPosition = new Vector2(
+                hit.point.x - (direction * stateMachine.playerCollider.bounds.extents.x),
+                stateMachine.RB.position.y
+            );
+
+            // Immediately set position
+            stateMachine.RB.position = targetPosition;
         }
+            
+        Debug.Log("[WallClingState] Entering Wall Cling State");
     }
 
     public override void Tick(float deltaTime)
@@ -46,7 +63,7 @@ public class WallClingState : PlayerBaseState
         if (stateMachine.RB != null)
         {
             // Calculate horizontal velocity based on input
-            float targetVelocityX = moveInput.x * stateMachine.MoveSpeed * 0.5f; // Reduced speed while wall clinging
+            float targetVelocityX = moveInput.x * stateMachine.MoveSpeed * wallClingHorizontalSpeedMultiplier;
             
             // Apply the velocities
             stateMachine.RB.linearVelocity = new Vector2(targetVelocityX, -slideSpeed);
@@ -87,8 +104,6 @@ public class WallClingState : PlayerBaseState
 
     public override void Exit()
     {
-        Debug.Log($"[WallClingState] Exiting Wall Cling State after {Time.time - enterTime:F2}s");
-        // Reset gravity if it was modified, or ensure velocity isn't stuck at slideSpeed
-        // The JumpState or other subsequent states should handle setting appropriate velocities.
+        Debug.Log("[WallClingState] Exiting Wall Cling State");
     }
 }

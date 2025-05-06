@@ -21,30 +21,32 @@ public class PlayerStateMachine : MonoBehaviour
 {
     private bool wasGroundedLastFrame = true;
 
-    // --- Coyote time (grounded grace period) ---
-    private float jumpGroundedGraceTimer = 0f;
+    // --- Coyote time (grounded grace period) --- 
+    private float jumpGroundedGraceTimer = 0f; // Initialize to 0 instead of 3
     private const float jumpGroundedGraceDuration = 0.10f; // 0.1 seconds of grace after jumping
     [field: SerializeField] public float MoveSpeed { get; private set; } = 5f;
-    [field: SerializeField] public float AirSpeed { get; private set; } = 3f; // Lower speed for air control
+    [field: SerializeField] public float AirControlSpeed { get; private set; } = 3f; // Separate air control speed
     [field: SerializeField] public float WallJumpForce { get; private set; } = 7.5f;
     [field: SerializeField] public int MaxJumps { get; private set; } = 1;
     public int JumpsRemaining { get; set; }
 
     [Header("Collider Settings")]
-    [SerializeField] private CapsuleCollider2D playerCollider; // Assign in Inspector
+    [SerializeField] public CapsuleCollider2D playerCollider; // Changed to public
     [SerializeField] private Vector2 standingColliderSize = new Vector2(1f, 2f); // Example
     [SerializeField] private Vector2 standingColliderOffset = new Vector2(0f, 0f); // Example
     [SerializeField] private Vector2 crouchingColliderSize = new Vector2(1f, 1f); // Example
     [SerializeField] private Vector2 crouchingColliderOffset = new Vector2(0f, -0.5f); // Example
     [SerializeField] private float standUpCheckDistance = 0.1f; // Distance above collider to check
-    [SerializeField] private LayerMask groundLayer; // Assign layers considered ground/obstacles
+    [SerializeField] public LayerMask groundLayer; // Changed to public
 
     [Header("Ground Check Settings")]
-    [SerializeField] private Transform groundCheckPoint; // Assign an empty GameObject childed to the player at their feet
-    [SerializeField] private float groundCheckRadius = 0.2f; // Adjust radius as needed
+    [SerializeField] private Transform groundCheckPoint;
+    [SerializeField] private float groundCheckRadius = 0.2f;
+    [SerializeField] private float groundCheckOffset = 0.1f; // Offset from feet for ground check
 
-    [Header("Crouch Settings")]
-    [SerializeField] public float CrouchSpeedMultiplier { get; private set; } = 0.25f; // Half of WalkState's 0.5 multiplier
+    [Header("Wall Check Settings")]
+    [SerializeField] private float wallCheckDistance = 0.04f;
+    [SerializeField] private float wallCheckOffset = 0.1f; // Offset from center for wall check
 
     [Header("Movement Deceleration")]
     [SerializeField] private float groundedDecelerationX = 20f;
@@ -72,7 +74,9 @@ public class PlayerStateMachine : MonoBehaviour
     public float GetDecelerationX(bool isGrounded) => isGrounded ? groundedDecelerationX : airborneDecelerationX;
     public float GetDecelerationY(bool isGrounded, bool isMovingUp) => isGrounded ? groundedDecelerationY : (isMovingUp ? airborneDecelerationY : airborneDecelerationYDown);
 
-    public float GetHorizontalSpeed(bool isGrounded, bool isWallClinging) => isGrounded ? MoveSpeed : (isWallClinging ? MoveSpeed * 0.5f : AirSpeed);
+    public float GetHorizontalSpeed(bool isGrounded, bool isWallClinging) => 
+        isGrounded ? MoveSpeed : 
+        (isWallClinging ? MoveSpeed * 0.5f : AirControlSpeed);
 
     private PlayerBaseState currentState;
 
@@ -86,7 +90,6 @@ public class PlayerStateMachine : MonoBehaviour
     public WalkState WalkState { get; private set; }
     public RunState RunState { get; private set; }
     public JumpState JumpState { get; private set; }
-    public CrouchState CrouchState { get; private set; }
     public SlideState SlideState { get; private set; }
     public WallClingState WallClingState { get; private set; }
     public ShootState ShootState { get; private set; } // Add ShootState declaration
@@ -155,8 +158,6 @@ public class PlayerStateMachine : MonoBehaviour
         stateRegistry[nameof(RunState)] = RunState;
         JumpState = new JumpState(this);
         stateRegistry[nameof(JumpState)] = JumpState;
-        CrouchState = new CrouchState(this);
-        stateRegistry[nameof(CrouchState)] = CrouchState;
         SlideState = new SlideState(this);
         // ... register other states
         WallClingState = new WallClingState(this);
@@ -193,7 +194,17 @@ public class PlayerStateMachine : MonoBehaviour
         }
         wasGroundedLastFrame = isGroundedNow;
 
-        currentState?.Tick(Time.deltaTime);
+        // Check for dash end
+        if (isDashing && Time.time >= dashEndTime)
+        {
+            EndDash();
+        }
+
+        // Update current state
+        if (currentState != null)
+        {
+            currentState.Tick(Time.deltaTime);
+        }
     }
 
     public void SwitchState(PlayerBaseState newState)
@@ -252,15 +263,17 @@ public class PlayerStateMachine : MonoBehaviour
 
         if (groundCheckPoint == null)
         {
-             Debug.LogError("Ground Check Point not assigned in the Inspector!", this);
-             return false; // Cannot check without the point
+            Debug.LogError("Ground Check Point not assigned in the Inspector!", this);
+            return false;
         }
-        // Check if the circle overlaps with anything on the ground layer
-        bool grounded = Physics2D.OverlapCircle(groundCheckPoint.position, groundCheckRadius, groundLayer);
+
+        Vector2 checkPosition = groundCheckPoint.position + new Vector3(0, groundCheckOffset, 0);
+        bool grounded = Physics2D.OverlapCircle(checkPosition, groundCheckRadius, groundLayer);
+        
         // Warn if grounded while moving up (likely ground check is inside collider)
         if (grounded && RB != null && RB.linearVelocity.y > 0.1f)
         {
-            Debug.LogWarning("[PlayerStateMachine] IsGrounded() is true while moving upward. Adjust groundCheckPoint position or groundCheckRadius in the Inspector so it is just below the feet and not inside the collider.");
+            Debug.LogWarning("[PlayerStateMachine] IsGrounded() is true while moving upward. Adjust groundCheckPoint position or groundCheckRadius in the Inspector.");
         }
         return grounded;
     }
@@ -269,42 +282,11 @@ public class PlayerStateMachine : MonoBehaviour
     public bool IsTouchingWall()
     {
         // Wall detection using 2D raycast
-        float wallCheckDistance = 0.1f; // How far to check
-        Vector2 direction = transform.localScale.x > 0 ? Vector2.right : Vector2.left; // Check based on facing direction
-        RaycastHit2D hit = Physics2D.Raycast(playerCollider.bounds.center, direction, playerCollider.bounds.extents.x + wallCheckDistance, groundLayer);
-        Debug.DrawRay(playerCollider.bounds.center, direction * (playerCollider.bounds.extents.x + wallCheckDistance), hit.collider != null ? Color.green : Color.red);
+        Vector2 direction = transform.localScale.x > 0 ? Vector2.right : Vector2.left;
+        Vector2 checkPosition = playerCollider.bounds.center + new Vector3(0, wallCheckOffset, 0);
+        RaycastHit2D hit = Physics2D.Raycast(checkPosition, direction, playerCollider.bounds.extents.x + wallCheckDistance, groundLayer);
+        Debug.DrawRay(checkPosition, direction * (playerCollider.bounds.extents.x + wallCheckDistance), hit.collider != null ? Color.green : Color.red);
         return hit.collider != null;
-    }
-
-    public void SetColliderCrouching()
-    {
-        if (playerCollider == null) return;
-        playerCollider.size = crouchingColliderSize;
-        playerCollider.offset = crouchingColliderOffset;
-    }
-
-    public void SetColliderStanding()
-    {
-        if (playerCollider == null) return;
-        playerCollider.size = standingColliderSize;
-        playerCollider.offset = standingColliderOffset;
-    }
-
-    public bool CanStandUp()
-    {
-        if (playerCollider == null) return true; // Cannot check, assume okay
-
-        // Calculate the top position of the standing collider
-        Vector2 standingTopPoint = (Vector2)transform.position + standingColliderOffset + Vector2.up * (standingColliderSize.y / 2f);
-        // Calculate the size of the check area (slightly larger than the top part of the standing collider)
-        Vector2 checkSize = new Vector2(standingColliderSize.x * 0.9f, standUpCheckDistance); // Check slightly narrower
-        // Calculate the center of the check area
-        Vector2 checkCenter = standingTopPoint + Vector2.up * (standUpCheckDistance / 2f);
-
-        // Perform an overlap check
-        Collider2D hit = Physics2D.OverlapBox(checkCenter, checkSize, 0f, groundLayer);
-
-        return hit == null; // Can stand up if nothing is hit
     }
 
     public void ClampVelocity(Rigidbody2D rb)
@@ -337,6 +319,7 @@ public class PlayerStateMachine : MonoBehaviour
     public void OnJump()
     {
         lastJumpTime = Time.time;
+        jumpGroundedGraceTimer = jumpGroundedGraceDuration; // Set the grace timer when jumping
     }
 
     public void StartDash(float direction)

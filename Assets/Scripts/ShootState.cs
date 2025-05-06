@@ -48,20 +48,13 @@ public class ShootState : PlayerBaseState
 
             if (stateMachine.IsGrounded())
             {
-                if (stateMachine.InputReader.IsCrouchHeld())
-                {
-                    stateMachine.SwitchState(stateMachine.CrouchState);
-                }
+                Vector2 moveInput = stateMachine.InputReader.GetMovementInput();
+                if (moveInput == Vector2.zero)
+                    stateMachine.SwitchState(stateMachine.IdleState);
+                else if (stateMachine.InputReader.IsRunPressed())
+                    stateMachine.SwitchState(stateMachine.RunState);
                 else
-                {
-                    Vector2 moveInput = stateMachine.InputReader.GetMovementInput();
-                    if (moveInput == Vector2.zero)
-                        stateMachine.SwitchState(stateMachine.IdleState);
-                    else if (stateMachine.InputReader.IsRunPressed())
-                        stateMachine.SwitchState(stateMachine.RunState);
-                    else
-                        stateMachine.SwitchState(stateMachine.WalkState);
-                }
+                    stateMachine.SwitchState(stateMachine.WalkState);
             }
             else
             {

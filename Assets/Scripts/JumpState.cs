@@ -16,24 +16,22 @@ public class JumpState : PlayerBaseState
     {
         enterTime = Time.time;
         Debug.Log($"[JumpState] Entering Jump State at {enterTime:F2}s");
-        
-        // Check if we're against a wall but not grounded (wall jump case)
-        bool isWallJump = stateMachine.IsTouchingWall() && !stateMachine.IsGrounded();
-        
+
+        // Check if this is a wall jump
+        bool isWallJump = stateMachine.IsTouchingWall() && stateMachine.RB.linearVelocity.y <= 0;
+
         if (isWallJump)
         {
+            // Wall jump
             if (stateMachine.RB != null)
             {
-                // Get the direction away from the wall (opposite of facing direction)
-                float wallJumpDirection = -stateMachine.transform.localScale.x;
+                // Get wall jump direction
+                Vector2 jumpDirection = GetWallJumpDirection();
                 
-                // Create a 45-degree vector away from the wall
-                Vector2 wallJumpForce = new Vector2(wallJumpDirection, 1f).normalized * stateMachine.WallJumpForce;
-                
-                // Apply the wall jump force as an impulse
-                stateMachine.RB.AddForce(wallJumpForce, ForceMode2D.Impulse);
-                
-                Debug.Log($"[JumpState] Wall Jump Force: {wallJumpForce}");
+                // Apply wall jump force
+                stateMachine.RB.linearVelocity = Vector2.zero; // Reset velocity for clean wall jump
+                stateMachine.RB.AddForce(jumpDirection * stateMachine.WallJumpForce, ForceMode2D.Impulse);
+                Debug.Log($"[JumpState] Wall Jump Force: {jumpDirection * stateMachine.WallJumpForce}");
             }
         }
         else
@@ -50,9 +48,9 @@ public class JumpState : PlayerBaseState
                     );
                 }
                 
-                // Apply jump force as an impulse
-                stateMachine.RB.AddForce(Vector2.up * stateMachine.JumpForce, ForceMode2D.Impulse);
-                Debug.Log($"[JumpState] Normal Jump Force: {Vector2.up * stateMachine.JumpForce}");
+                // Apply initial jump force as an impulse
+                stateMachine.RB.AddForce(Vector2.up * stateMachine.InitialJumpForce, ForceMode2D.Impulse);
+                Debug.Log($"[JumpState] Initial Jump Force: {Vector2.up * stateMachine.InitialJumpForce}");
             }
         }
         
@@ -62,8 +60,8 @@ public class JumpState : PlayerBaseState
             stateMachine.JumpsRemaining = 0;
         }
         
-        // Record the jump time
-        stateMachine.OnJump();
+        // Record the jump start
+        stateMachine.OnJumpStart();
         
         // Play jump animation
         if (stateMachine.Animator != null)
@@ -95,6 +93,21 @@ public class JumpState : PlayerBaseState
             return;
         }
 
+        // Apply continuous jump force while button is held
+        if (stateMachine.RB != null && stateMachine.InputReader.IsJumpHeld())
+        {
+            float jumpForce = stateMachine.GetJumpForce();
+            if (jumpForce > 0)
+            {
+                stateMachine.RB.AddForce(Vector2.up * jumpForce);
+            }
+        }
+        else
+        {
+            // If jump button is released, end the jump
+            stateMachine.OnJumpEnd();
+        }
+
         // Apply horizontal movement input while airborne
         Vector2 moveInputAir = stateMachine.GetMovementInput();
         float targetVelocityX = moveInputAir.x * stateMachine.GetHorizontalSpeed(
@@ -110,17 +123,13 @@ public class JumpState : PlayerBaseState
         // Apply horizontal movement with deceleration
         if (stateMachine.RB != null)
         {
+            // Apply movement force
             stateMachine.RB.AddForce(new Vector2(forceX, 0f));
+            
+            // Apply deceleration
+            Vector2 decelerationForce = stateMachine.ApplyDeceleration(stateMachine.RB.linearVelocity, stateMachine.IsGrounded(), deltaTime);
+            stateMachine.RB.AddForce(decelerationForce);
         }
-
-        // Apply vertical deceleration
-        float decelerationY = stateMachine.GetDecelerationY(
-            stateMachine.IsGrounded(),
-            stateMachine.RB.linearVelocity.y > 0
-        );
-        float currentVelocityY = stateMachine.RB.linearVelocity.y;
-        float forceY = -currentVelocityY * decelerationY;
-        stateMachine.RB.AddForce(new Vector2(0f, forceY));
 
         // Clamp velocity to max speeds
         stateMachine.ClampVelocity(stateMachine.RB);

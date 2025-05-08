@@ -32,17 +32,13 @@ public class FallState : PlayerBaseState
         // Apply horizontal movement with deceleration
         if (stateMachine.RB != null)
         {
+            // Apply movement force
             stateMachine.RB.AddForce(new Vector2(forceX, 0f));
+            
+            // Apply deceleration
+            Vector2 decelerationForce = stateMachine.ApplyDeceleration(stateMachine.RB.linearVelocity, stateMachine.IsGrounded(), deltaTime);
+            stateMachine.RB.AddForce(decelerationForce);
         }
-
-        // Apply vertical deceleration
-        float decelerationY = stateMachine.GetDecelerationY(
-            stateMachine.IsGrounded(),
-            stateMachine.RB.linearVelocity.y > 0
-        );
-        float currentVelocityY = stateMachine.RB.linearVelocity.y;
-        float forceY = -currentVelocityY * decelerationY;
-        stateMachine.RB.AddForce(new Vector2(0f, forceY));
 
         // Clamp velocity to max speeds
         stateMachine.ClampVelocity(stateMachine.RB);
@@ -60,10 +56,17 @@ public class FallState : PlayerBaseState
             return;
         }
 
-        // If touching wall and falling, transition to WallClingState
+        // Check for wall cling
         if (stateMachine.IsTouchingWall() && stateMachine.RB.linearVelocity.y <= 0)
         {
             stateMachine.SwitchState(stateMachine.WallClingState);
+            return;
+        }
+
+        // Check for double jump
+        if (stateMachine.InputReader.IsJumpPressed() && stateMachine.JumpsRemaining > 0 && stateMachine.CanJump())
+        {
+            stateMachine.SwitchState(stateMachine.JumpState);
             return;
         }
 
@@ -76,13 +79,6 @@ public class FallState : PlayerBaseState
                 stateMachine.StartDash(direction);
                 return;
             }
-        }
-
-        // Check for Jump input (only on button press for double jumps)
-        if (stateMachine.InputReader.IsJumpPressed() && stateMachine.JumpsRemaining > 0 && stateMachine.CanJump())
-        {
-            stateMachine.SwitchState(stateMachine.JumpState);
-            return; // Exit early after state switch
         }
 
         // Allow shooting in air

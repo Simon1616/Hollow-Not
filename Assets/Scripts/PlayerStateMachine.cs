@@ -62,7 +62,12 @@ public class PlayerStateMachine : MonoBehaviour
 
     [Header("Jump Settings")]
     [SerializeField] private float jumpCooldown = 0.67f; // 2/3 of a second
+    [field: SerializeField] public float InitialJumpForce { get; private set; } = 10f; // Initial jump force
+    [field: SerializeField] public float JumpHoldForce { get; private set; } = 5f; // Additional force applied while holding jump
+    [field: SerializeField] public float MaxJumpHoldTime { get; private set; } = 0.3f; // Maximum time jump force can be applied
     private float lastJumpTime = 0f;
+    private float jumpHoldStartTime = 0f;
+    private bool isJumpHeld = false;
 
     [Header("Dash Settings")]
     [SerializeField] private float dashSpeed = 20f;
@@ -316,10 +321,34 @@ public class PlayerStateMachine : MonoBehaviour
         return Time.time >= lastJumpTime + jumpCooldown;
     }
 
-    public void OnJump()
+    public void OnJumpStart()
     {
         lastJumpTime = Time.time;
-        jumpGroundedGraceTimer = jumpGroundedGraceDuration; // Set the grace timer when jumping
+        jumpGroundedGraceTimer = jumpGroundedGraceDuration;
+        jumpHoldStartTime = Time.time;
+        isJumpHeld = true;
+    }
+
+    public void OnJumpEnd()
+    {
+        isJumpHeld = false;
+    }
+
+    public float GetJumpForce()
+    {
+        if (!isJumpHeld) return 0f;
+        
+        float holdTime = Time.time - jumpHoldStartTime;
+        if (holdTime >= MaxJumpHoldTime) return 0f;
+        
+        // Calculate remaining force based on hold time
+        float remainingForce = Mathf.Lerp(JumpHoldForce, 0f, holdTime / MaxJumpHoldTime);
+        return remainingForce;
+    }
+
+    public bool IsJumpHeld()
+    {
+        return isJumpHeld;
     }
 
     public void StartDash(float direction)
@@ -360,5 +389,32 @@ public class PlayerStateMachine : MonoBehaviour
     public bool CanDash()
     {
         return !isDashing;
+    }
+
+    public Vector2 ApplyDeceleration(Vector2 currentVelocity, bool isGrounded, float deltaTime)
+    {
+        float decelerationX = GetDecelerationX(isGrounded);
+        float decelerationY = GetDecelerationY(isGrounded, currentVelocity.y > 0);
+        
+        // Scale deceleration to be applied over 1/100th of a second
+        float timeScale = deltaTime / 0.01f;
+        
+        // Only apply deceleration if moving in that direction
+        float forceX = currentVelocity.x != 0 ? -Mathf.Sign(currentVelocity.x) * decelerationX * timeScale : 0f;
+        
+        // Apply vertical deceleration only in the correct direction
+        float forceY = 0f;
+        if (currentVelocity.y > 0)
+        {
+            // Only apply upward deceleration when moving up
+            forceY = -currentVelocity.y * decelerationY * timeScale;
+        }
+        else if (currentVelocity.y < 0)
+        {
+            // Only apply downward deceleration when moving down
+            forceY = -currentVelocity.y * airborneDecelerationYDown * timeScale;
+        }
+        
+        return new Vector2(forceX, forceY);
     }
 }

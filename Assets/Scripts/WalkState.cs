@@ -90,16 +90,11 @@ public class WalkState : PlayerBaseState
             
             // Apply horizontal movement with deceleration
             stateMachine.RB.AddForce(new Vector2(forceX, 0f));
+            
+            // Apply deceleration
+            Vector2 decelerationForce = stateMachine.ApplyDeceleration(stateMachine.RB.linearVelocity, stateMachine.IsGrounded(), deltaTime);
+            stateMachine.RB.AddForce(decelerationForce);
         }
-
-        // Apply vertical deceleration
-        float decelerationY = stateMachine.GetDecelerationY(
-            stateMachine.IsGrounded(),
-            stateMachine.RB.linearVelocity.y > 0
-        );
-        float currentVelocityY = stateMachine.RB.linearVelocity.y;
-        float forceY = -currentVelocityY * decelerationY;
-        stateMachine.RB.AddForce(new Vector2(0f, forceY));
 
         // Clamp velocity to max speeds
         stateMachine.ClampVelocity(stateMachine.RB);
@@ -113,9 +108,9 @@ public class WalkState : PlayerBaseState
 
         // Debug: log duration in state
         float duration = Time.time - enterTime;
-        if (duration > 0 && Mathf.FloorToInt(duration) % 2 == 0)
+        if (Mathf.FloorToInt(duration * 2) % 2 == 0) // Log every half second
         {
-            Debug.Log($"[WalkState] Walking for {duration:F1} seconds");
+            Debug.Log($"[WalkState] Walking for {duration:F2}s");
         }
     }
 

@@ -62,12 +62,8 @@ public class PlayerStateMachine : MonoBehaviour
 
     [Header("Jump Settings")]
     [SerializeField] private float jumpCooldown = 0.67f; // 2/3 of a second
-    [field: SerializeField] public float InitialJumpForce { get; private set; } = 10f; // Initial jump force
-    [field: SerializeField] public float JumpHoldForce { get; private set; } = 5f; // Additional force applied while holding jump
-    [field: SerializeField] public float MaxJumpHoldTime { get; private set; } = 0.3f; // Maximum time jump force can be applied
+    [field: SerializeField] public float JumpForce { get; private set; } = 10f; // Single jump force
     private float lastJumpTime = 0f;
-    private float jumpHoldStartTime = 0f;
-    private bool isJumpHeld = false;
 
     [Header("Dash Settings")]
     [SerializeField] private float dashSpeed = 20f;
@@ -122,7 +118,6 @@ public class PlayerStateMachine : MonoBehaviour
     private float lastDirectionChangeTime = 0f;
     private const float DIRECTION_CHANGE_DELAY = 0.1f; // 1/10 of a second delay
 
-    public float JumpForce = 10f;
     public bool IsFacingRight { get; private set; } = true;
     public PlayerBaseState CurrentState { get; private set; }
 
@@ -325,30 +320,21 @@ public class PlayerStateMachine : MonoBehaviour
     {
         lastJumpTime = Time.time;
         jumpGroundedGraceTimer = jumpGroundedGraceDuration;
-        jumpHoldStartTime = Time.time;
-        isJumpHeld = true;
     }
 
     public void OnJumpEnd()
     {
-        isJumpHeld = false;
+        // No longer needed for variable jump height
     }
 
     public float GetJumpForce()
     {
-        if (!isJumpHeld) return 0f;
-        
-        float holdTime = Time.time - jumpHoldStartTime;
-        if (holdTime >= MaxJumpHoldTime) return 0f;
-        
-        // Calculate remaining force based on hold time
-        float remainingForce = Mathf.Lerp(JumpHoldForce, 0f, holdTime / MaxJumpHoldTime);
-        return remainingForce;
+        return JumpForce;
     }
 
     public bool IsJumpHeld()
     {
-        return isJumpHeld;
+        return false; // No longer using jump hold
     }
 
     public void StartDash(float direction)

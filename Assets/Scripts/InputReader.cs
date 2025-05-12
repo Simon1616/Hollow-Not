@@ -31,13 +31,13 @@ public class InputReader
 
     public bool IsJumpPressed()
     {
-        // Use GetButton for continuous check while held
-        return Input.GetButton("Jump");
+        // Use GetButtonDown for single press detection
+        return Input.GetButtonDown("Jump");
     }
 
     public bool IsJumpHeld()
     {
-        // This is now the same as IsJumpPressed since we want continuous input
+        // Use GetButton for continuous check while held
         return Input.GetButton("Jump");
     }
 

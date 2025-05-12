@@ -48,9 +48,9 @@ public class JumpState : PlayerBaseState
                     );
                 }
                 
-                // Apply initial jump force as an impulse
-                stateMachine.RB.AddForce(Vector2.up * stateMachine.InitialJumpForce, ForceMode2D.Impulse);
-                Debug.Log($"[JumpState] Initial Jump Force: {Vector2.up * stateMachine.InitialJumpForce}");
+                // Apply jump force as an impulse
+                stateMachine.RB.AddForce(Vector2.up * stateMachine.JumpForce, ForceMode2D.Impulse);
+                Debug.Log($"[JumpState] Jump Force: {Vector2.up * stateMachine.JumpForce}");
             }
         }
         
@@ -91,21 +91,6 @@ public class JumpState : PlayerBaseState
         {
             stateMachine.SwitchState(stateMachine.ShootState);
             return;
-        }
-
-        // Apply continuous jump force while button is held
-        if (stateMachine.RB != null && stateMachine.InputReader.IsJumpHeld())
-        {
-            float jumpForce = stateMachine.GetJumpForce();
-            if (jumpForce > 0)
-            {
-                stateMachine.RB.AddForce(Vector2.up * jumpForce);
-            }
-        }
-        else
-        {
-            // If jump button is released, end the jump
-            stateMachine.OnJumpEnd();
         }
 
         // Apply horizontal movement input while airborne
@@ -151,8 +136,8 @@ public class JumpState : PlayerBaseState
         // Check if falling against a wall -> transition to Wall Cling
         if (stateMachine.IsTouchingWall() && stateMachine.RB.linearVelocity.y <= 0)
         {
-            // If jump is held and we have jumps remaining, perform wall jump
-            if (stateMachine.InputReader.IsJumpHeld() && stateMachine.JumpsRemaining > 0 && stateMachine.CanJump())
+            // If jump is pressed and we have jumps remaining, perform wall jump
+            if (stateMachine.InputReader.IsJumpPressed() && stateMachine.JumpsRemaining > 0 && stateMachine.CanJump())
             {
                 stateMachine.SwitchState(stateMachine.JumpState);
                 return;
@@ -161,7 +146,7 @@ public class JumpState : PlayerBaseState
             return;
         }
 
-        // Check for double jump (only on button press, not hold)
+        // Check for double jump (only on button press)
         if (stateMachine.InputReader.IsJumpPressed() && stateMachine.JumpsRemaining > 0 && stateMachine.CanJump())
         {
             stateMachine.SwitchState(stateMachine.JumpState);

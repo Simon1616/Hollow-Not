@@ -160,7 +160,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   <MoveSpeed>k__BackingField: 7
   <AirControlSpeed>k__BackingField: 6
-  <WallJumpForce>k__BackingField: 13
+  <WallJumpForce>k__BackingField: 19
   <MaxJumps>k__BackingField: 1
   playerCollider: {fileID: 1779346489392483852}
   standingColliderSize: {x: 1, y: 2}
@@ -186,8 +186,12 @@ MonoBehaviour:
   maxFallSpeed: 30
   jumpCooldown: 0.15
   <JumpForce>k__BackingField: 14
-  dashSpeed: 20
-  dashDuration: 0.1
+  <WallJumpAngle>k__BackingField: 30
+  <DashSpeed>k__BackingField: 20
+  <DashDuration>k__BackingField: 0.2
+  <DashCooldown>k__BackingField: 0.45
+  <AllowAirDash>k__BackingField: 1
+  <MaxAirDashes>k__BackingField: 1
 --- !u!70 &1779346489392483852
 CapsuleCollider2D:
   m_ObjectHideFlags: 0

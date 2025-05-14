@@ -13,7 +13,7 @@ public class RunState : PlayerBaseState
         enterTime = Time.time;
         // Play run animation
         if (stateMachine.Animator != null)
-            stateMachine.Animator.Play("Dash");
+            stateMachine.Animator.Play("Run");
         Debug.Log($"[RunState] Entering Run State at {enterTime:F2}s");
         // Play run sound if needed
         // AudioManager.Instance?.Play("RunSound");
@@ -105,12 +105,9 @@ public class RunState : PlayerBaseState
         // Clamp velocity to max speeds
         stateMachine.ClampVelocity(stateMachine.RB);
 
-        // Optionally update animation direction
-        if (stateMachine.Animator != null)
-        {
-            stateMachine.Animator.SetFloat("Horizontal", moveInput.x);
-            stateMachine.Animator.SetFloat("Vertical", moveInput.y);
-        }
+        // Update animation parameters using safe methods
+        stateMachine.SafeSetAnimatorFloat("Horizontal", moveInput.x);
+        stateMachine.SafeSetAnimatorFloat("Vertical", moveInput.y);
 
         // Debug: log duration in state
         float duration = Time.time - enterTime;
@@ -118,6 +115,19 @@ public class RunState : PlayerBaseState
         {
             Debug.Log($"[RunState] Running for {duration:F1} seconds");
         }
+    }
+
+    // Helper method to check if an animator parameter exists
+    private bool HasAnimatorParameter(Animator animator, string paramName)
+    {
+        foreach (AnimatorControllerParameter param in animator.parameters)
+        {
+            if (param.name == paramName)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     public override void Exit()

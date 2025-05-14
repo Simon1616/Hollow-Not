@@ -7,8 +7,11 @@ public class WallClingState : PlayerBaseState
     [SerializeField] private float wallSnapDistance = 0.1f;
     [SerializeField] private float wallSnapSpeed = 20f;
     [SerializeField] private float wallClingHorizontalSpeedMultiplier = 0.5f;
+    [SerializeField] private float horizontalInputDelay = 0.05f; // 1/20th of a second
 
     private bool jumpHeldOnEnter = false;
+    private float horizontalInputTime = 0f;
+    private Vector2 lastMoveInput = Vector2.zero;
 
     public WallClingState(PlayerStateMachine stateMachine) : base(stateMachine)
     {
@@ -19,10 +22,17 @@ public class WallClingState : PlayerBaseState
         // Store if jump was held when entering state
         jumpHeldOnEnter = stateMachine.InputReader.IsJumpPressed();
         
+        // Reset horizontal input delay
+        horizontalInputTime = Time.time;
+        lastMoveInput = Vector2.zero;
+        
         // Play wall cling animation if available
         if (stateMachine.Animator != null)
             stateMachine.Animator.Play("Cling");
             
+        // Reset double jump charge when touching wall
+        stateMachine.JumpsRemaining = stateMachine.MaxJumps;
+        
         // Immediately snap to wall
         float direction = stateMachine.IsFacingRight ? 1f : -1f;
         RaycastHit2D hit = Physics2D.Raycast(
@@ -57,13 +67,24 @@ public class WallClingState : PlayerBaseState
         }
 
         // Get movement input
-        Vector2 moveInput = stateMachine.InputReader.GetMovementInput();
-
+        Vector2 currentMoveInput = stateMachine.InputReader.GetMovementInput();
+        
         // Apply horizontal movement while maintaining downward slide
         if (stateMachine.RB != null)
         {
-            // Calculate horizontal velocity based on input
-            float targetVelocityX = moveInput.x * stateMachine.MoveSpeed * wallClingHorizontalSpeedMultiplier;
+            // Check if movement input has changed
+            if (currentMoveInput.x != lastMoveInput.x)
+            {
+                horizontalInputTime = Time.time;
+                lastMoveInput = currentMoveInput;
+            }
+            
+            // Calculate horizontal velocity based on input with delay
+            float targetVelocityX = 0f;
+            if (Time.time >= horizontalInputTime + horizontalInputDelay)
+            {
+                targetVelocityX = lastMoveInput.x * stateMachine.MoveSpeed * wallClingHorizontalSpeedMultiplier;
+            }
             
             // Apply the velocities
             stateMachine.RB.linearVelocity = new Vector2(targetVelocityX, -slideSpeed);
@@ -85,7 +106,7 @@ public class WallClingState : PlayerBaseState
         if (stateMachine.IsGrounded())
         {
             stateMachine.JumpsRemaining = stateMachine.MaxJumps;
-            if (moveInput == Vector2.zero)
+            if (currentMoveInput == Vector2.zero)
                 stateMachine.SwitchState(stateMachine.IdleState);
             else if (stateMachine.InputReader.IsRunPressed())
                 stateMachine.SwitchState(stateMachine.RunState);

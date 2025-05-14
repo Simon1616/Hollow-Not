@@ -9,12 +9,16 @@ public class ShootState : PlayerBaseState
 
     public override void Enter()
     {
-        // Logic when entering the shoot state (e.g., play animation, aim)
-        Debug.Log("Player entered Shoot State");
-        // Ctx.Animator.SetBool("IsShooting", true); // Example animation trigger
-
+        // Play shoot animation
         if (stateMachine.Animator != null)
+        {
             stateMachine.Animator.Play("Shoot");
+            // Use safe animation parameter setting for any boolean flags
+            stateMachine.SafeSetAnimatorBool("IsShooting", true);
+        }
+        
+        // Implement shooting logic here
+        // Example: create bullet, play sound, etc.
     }
 
     public override void Tick(float deltaTime)
@@ -28,9 +32,12 @@ public class ShootState : PlayerBaseState
 
     public override void Exit()
     {
-        // Logic when exiting the shoot state (e.g., stop animation)
-        Debug.Log("Player exited Shoot State");
-        // Ctx.Animator.SetBool("IsShooting", false); // Example animation reset
+        // Reset any shooting-related state
+        if (stateMachine.Animator != null)
+        {
+            // Reset animation flags safely
+            stateMachine.SafeSetAnimatorBool("IsShooting", false);
+        }
     }
 
     // Helper method for transition checks (called from Tick)

@@ -99,12 +99,9 @@ public class WalkState : PlayerBaseState
         // Clamp velocity to max speeds
         stateMachine.ClampVelocity(stateMachine.RB);
 
-        // Optionally update animation direction
-        if (stateMachine.Animator != null)
-        {
-            stateMachine.Animator.SetFloat("Horizontal", moveInput.x);
-            stateMachine.Animator.SetFloat("Vertical", moveInput.y);
-        }
+        // Update animation parameters using safe methods
+        stateMachine.SafeSetAnimatorFloat("Horizontal", moveInput.x);
+        stateMachine.SafeSetAnimatorFloat("Vertical", moveInput.y);
 
         // Debug: log duration in state
         float duration = Time.time - enterTime;

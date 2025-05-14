@@ -32,6 +32,8 @@ public class JumpState : PlayerBaseState
                 stateMachine.RB.linearVelocity = Vector2.zero; // Reset velocity for clean wall jump
                 stateMachine.RB.AddForce(jumpDirection * stateMachine.WallJumpForce, ForceMode2D.Impulse);
                 Debug.Log($"[JumpState] Wall Jump Force: {jumpDirection * stateMachine.WallJumpForce}");
+                
+                // Wall jumps don't consume a jump charge
             }
         }
         else
@@ -51,13 +53,13 @@ public class JumpState : PlayerBaseState
                 // Apply jump force as an impulse
                 stateMachine.RB.AddForce(Vector2.up * stateMachine.JumpForce, ForceMode2D.Impulse);
                 Debug.Log($"[JumpState] Jump Force: {Vector2.up * stateMachine.JumpForce}");
+                
+                // Only decrement jumps if not grounded and not a wall jump
+                if (!stateMachine.IsGrounded())
+                {
+                    stateMachine.JumpsRemaining--;
+                }
             }
-        }
-        
-        // Only decrement jumps if not grounded and not a wall jump
-        if (!stateMachine.IsGrounded() && !isWallJump)
-        {
-            stateMachine.JumpsRemaining = 0;
         }
         
         // Record the jump start
@@ -173,8 +175,16 @@ public class JumpState : PlayerBaseState
         float facing = stateMachine.transform.localScale.x;
         Vector2 wallNormal = facing > 0 ? Vector2.left : Vector2.right;
         
-        // Create a 45-degree upward vector away from the wall
-        Vector2 jumpDirection = (wallNormal + Vector2.up).normalized;
+        // Convert wall jump angle from degrees to radians
+        float angleRadians = stateMachine.WallJumpAngle * Mathf.Deg2Rad;
+        
+        // Calculate direction components based on the angle
+        // At 30 degrees: more horizontal (cos 30° = 0.866) and less vertical (sin 30° = 0.5) 
+        float xComponent = Mathf.Cos(angleRadians) * Mathf.Sign(wallNormal.x);
+        float yComponent = Mathf.Sin(angleRadians);
+        
+        // Create angled jump vector and normalize it
+        Vector2 jumpDirection = new Vector2(xComponent, yComponent).normalized;
         
         return jumpDirection;
     }

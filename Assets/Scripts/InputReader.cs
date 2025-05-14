@@ -51,6 +51,7 @@ public class InputReader
 
     public bool IsDashPressed()
     {
-        return Input.GetButtonDown("Fire2");
+        // Use right mouse click (Mouse1) for dash
+        return Input.GetMouseButtonDown(1);
     }
 }

@@ -583,41 +583,17 @@ public class PlayerStateMachine : MonoBehaviour
             EndDash();
         }
 
-        // Process dash input - only if we have InputReader and DashState
-        if (InputReader != null && DashState != null && InputReader.IsDashPressed() && CanDash())
+        // Handle dash input first
+        if (InputReader != null && DashState != null && InputReader.IsDashPressed() && PlayerDashState.CanDash())
         {
-            float direction = GetMovementInput().x;
-            if (direction != 0)
-            {
-                StartDash(direction);
-                return;
-            }
+            StartDash(IsFacingRight ? 1f : -1f);
+            return;
         }
 
-        // Update current state
-        if (currentState != null)
+        // Handle other state transitions
+        if (CurrentState != null)
         {
-            try
-            {
-                currentState.Tick(Time.deltaTime);
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"[PlayerStateMachine] Error during Tick of state {currentState.GetType().Name}: {e.Message}");
-                
-                // If Tick fails, try falling back to IdleState
-                if (currentState != IdleState && IdleState != null)
-                {
-                    Debug.Log("[PlayerStateMachine] Falling back to IdleState after Tick error");
-                    SwitchState(IdleState);
-                }
-            }
-        }
-        else if (IdleState != null)
-        {
-            // If current state is null, initialize with idle state
-            Debug.LogWarning("Current state was null. Initializing with Idle state.");
-            SwitchState(IdleState);
+            CurrentState.Tick(Time.deltaTime);
         }
     }
 
@@ -926,13 +902,10 @@ public class PlayerStateMachine : MonoBehaviour
     public void StartDash(float direction)
     {
         isDashing = true;
-        // Store the direction
-        float dashDirection = direction;
         dashEndTime = Time.time + DashDuration;
-        // Set velocity directly to dash speed, ignoring drag
-        RB.linearVelocity = new Vector2(direction * DashSpeed, 0f);
-        // Disable drag during dash
-        RB.linearDamping = 0f;
+        
+        // Switch to dash state instead of just setting velocity
+        SwitchState(DashState);
     }
 
     public void EndDash()

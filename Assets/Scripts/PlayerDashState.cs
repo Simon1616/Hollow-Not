@@ -2,8 +2,12 @@ using UnityEngine;
 
 public class PlayerDashState : PlayerBaseState
 {
-    private float enterTime;
+    private float originalDrag;
+    private float originalGravityScale;
+    private float dashEndTime;
     private float dashDirection;
+    private const float DASH_COOLDOWN = 0.45f;
+    private static float lastDashTime = -DASH_COOLDOWN; // Initialize to allow immediate first dash
 
     public PlayerDashState(PlayerStateMachine stateMachine) : base(stateMachine)
     {
@@ -11,70 +15,79 @@ public class PlayerDashState : PlayerBaseState
 
     public override void Enter()
     {
-        enterTime = Time.time;
-        
-        // Get direction based on player facing
-        dashDirection = stateMachine.IsFacingRight ? 1f : -1f;
-        
-        // Reset velocity
-        stateMachine.RB.linearVelocity = Vector2.zero;
-        
-        // Disable gravity during dash
+        // Store original physics values
+        originalDrag = stateMachine.RB.linearDamping;
+        originalGravityScale = stateMachine.RB.gravityScale;
+
+        // Disable drag and gravity
+        stateMachine.RB.linearDamping = 0f;
         stateMachine.RB.gravityScale = 0f;
         
-        // Apply initial dash velocity
+        // Always use facing direction for dash
+        dashDirection = stateMachine.IsFacingRight ? 1f : -1f;
+        
+        // Set velocity to dash speed with zero vertical velocity
         stateMachine.RB.linearVelocity = new Vector2(dashDirection * stateMachine.DashSpeed, 0f);
         
-        // Record dash start
-        stateMachine.OnDashStart();
+        // Set dash end time
+        dashEndTime = Time.time + stateMachine.DashDuration;
         
-        // Play Run animation instead of Dash for dashing
-        if (stateMachine.Animator != null)
-        {
-            stateMachine.SafePlayAnimation("Run");
-        }
+        // Update last dash time
+        lastDashTime = Time.time;
         
-        Debug.Log($"[PlayerDashState] Entering Dash State, Direction: {dashDirection}");
+        // Play dash animation
+        stateMachine.Animator.Play("Run", 0, 0f);
+        
+        Debug.Log($"Entered Dash State with direction: {dashDirection}");
     }
 
     public override void Tick(float deltaTime)
     {
-        // Keep velocity consistent during dash
+        // Maintain dash velocity with zero vertical velocity
         stateMachine.RB.linearVelocity = new Vector2(dashDirection * stateMachine.DashSpeed, 0f);
         
         // Check if dash duration is complete
-        if (!stateMachine.IsDashing())
+        if (Time.time >= dashEndTime)
         {
-            // Dash is complete, switch to appropriate state
-            if (stateMachine.IsGrounded())
-            {
-                Vector2 moveInput = stateMachine.GetMovementInput();
-                if (moveInput == Vector2.zero)
-                    stateMachine.SwitchState(stateMachine.IdleState);
-                else if (stateMachine.InputReader.IsRunPressed())
-                    stateMachine.SwitchState(stateMachine.RunState);
-                else
-                    stateMachine.SwitchState(stateMachine.WalkState);
-            }
-            else if (stateMachine.IsTouchingWall() && stateMachine.RB.linearVelocity.y <= 0)
-            {
-                stateMachine.SwitchState(stateMachine.WallClingState);
-            }
-            else
-            {
-                stateMachine.SwitchState(stateMachine.FallState);
-            }
-            return;
+            stateMachine.SwitchState(stateMachine.IdleState);
         }
-        
-        // No input is processed during dash as per requirements
     }
 
     public override void Exit()
     {
-        // Reset gravity to default
-        stateMachine.RB.gravityScale = 1f;
+        // Restore original physics values
+        stateMachine.RB.linearDamping = originalDrag;
+        stateMachine.RB.gravityScale = originalGravityScale;
         
-        Debug.Log($"[PlayerDashState] Exiting Dash State after {Time.time - enterTime:F2}s");
+        // Calculate post-dash velocity based on current state
+        float postDashVelocityX = 0f;
+        float postDashVelocityY = 0f;
+        
+        if (stateMachine.IsGrounded())
+        {
+            // If grounded, use normal movement speed
+            postDashVelocityX = stateMachine.GetMovementInput().x * stateMachine.MoveSpeed;
+            postDashVelocityY = 0f;
+        }
+        else if (stateMachine.IsTouchingWall() && stateMachine.RB.linearVelocity.y <= 0)
+        {
+            // If wall clinging, use wall cling speed
+            postDashVelocityX = stateMachine.GetMovementInput().x * stateMachine.MoveSpeed * 0.5f;
+            postDashVelocityY = 0f;
+        }
+        else
+        {
+            // If in air, use air control speed and current vertical velocity
+            postDashVelocityX = stateMachine.GetMovementInput().x * stateMachine.AirControlSpeed;
+            postDashVelocityY = stateMachine.RB.linearVelocity.y;
+        }
+        
+        // Apply the calculated velocity
+        stateMachine.RB.linearVelocity = new Vector2(postDashVelocityX, postDashVelocityY);
+    }
+
+    public static bool CanDash()
+    {
+        return Time.time >= lastDashTime + DASH_COOLDOWN;
     }
 } 

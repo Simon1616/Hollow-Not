@@ -187,7 +187,7 @@ MonoBehaviour:
   jumpCooldown: 0.15
   <JumpForce>k__BackingField: 14
   <WallJumpAngle>k__BackingField: 30
-  <DashSpeed>k__BackingField: 20
+  <DashSpeed>k__BackingField: 16
   <DashDuration>k__BackingField: 0.2
   <DashCooldown>k__BackingField: 0.45
   <AllowAirDash>k__BackingField: 1

@@ -8,6 +8,7 @@ public class PlayerDashState : PlayerBaseState
     private float dashDirection;
     private const float DASH_COOLDOWN = 0.45f;
     private static float lastDashTime = -DASH_COOLDOWN; // Initialize to allow immediate first dash
+    private static bool canAirDash = true; // Track if air dash is available
 
     public PlayerDashState(PlayerStateMachine stateMachine) : base(stateMachine)
     {
@@ -34,6 +35,12 @@ public class PlayerDashState : PlayerBaseState
         
         // Update last dash time
         lastDashTime = Time.time;
+        
+        // If dashing in air, disable air dash until grounded
+        if (!stateMachine.IsGrounded())
+        {
+            canAirDash = false;
+        }
         
         // Play dash animation
         stateMachine.Animator.Play("Run", 0, 0f);
@@ -68,12 +75,16 @@ public class PlayerDashState : PlayerBaseState
             // If grounded, use normal movement speed
             postDashVelocityX = stateMachine.GetMovementInput().x * stateMachine.MoveSpeed;
             postDashVelocityY = 0f;
+            // Reset air dash when grounded
+            canAirDash = true;
         }
         else if (stateMachine.IsTouchingWall() && stateMachine.RB.linearVelocity.y <= 0)
         {
             // If wall clinging, use wall cling speed
             postDashVelocityX = stateMachine.GetMovementInput().x * stateMachine.MoveSpeed * 0.5f;
             postDashVelocityY = 0f;
+            // Reset air dash when wall clinging
+            canAirDash = true;
         }
         else
         {
@@ -86,8 +97,17 @@ public class PlayerDashState : PlayerBaseState
         stateMachine.RB.linearVelocity = new Vector2(postDashVelocityX, postDashVelocityY);
     }
 
-    public static bool CanDash()
+    public static bool CanDash(bool isGrounded)
     {
-        return Time.time >= lastDashTime + DASH_COOLDOWN;
+        // Check cooldown
+        if (Time.time < lastDashTime + DASH_COOLDOWN)
+            return false;
+            
+        // If grounded, can always dash
+        if (isGrounded)
+            return true;
+            
+        // If in air, can only dash if air dash is available
+        return canAirDash;
     }
 } 

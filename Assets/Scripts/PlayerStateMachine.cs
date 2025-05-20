@@ -24,55 +24,85 @@ public class PlayerStateMachine : MonoBehaviour
     // --- Coyote time (grounded grace period) --- 
     private float jumpGroundedGraceTimer = 0f; // Initialize to 0 instead of 3
     private const float jumpGroundedGraceDuration = 0.10f; // 0.1 seconds of grace after jumping
-    [field: SerializeField] public float MoveSpeed { get; private set; } = 5f;
-    [field: SerializeField] public float AirControlSpeed { get; private set; } = 3f; // Separate air control speed
-    [field: SerializeField] public float WallJumpForce { get; private set; } = 7.5f;
-    [field: SerializeField] public int MaxJumps { get; private set; } = 1;
-    public int JumpsRemaining { get; set; }
+
+    // Reference dimensions in Unity units
+    private const float REFERENCE_HEIGHT = 5f; // Height in Unity units
+    private const float REFERENCE_WIDTH = 3f;  // Width in Unity units
+    
+    // Screen scaling factor - only used for visual/physics checks, not movement
+    private float screenScaleFactor = 1f;
+    
+    // Movement values in Unity units (no screen scaling)
+    [field: SerializeField] public float BaseMoveSpeed { get; private set; } = 8f;  // Reduced from 80f
+    [field: SerializeField] public float BaseAirControlSpeed { get; private set; } = 4.8f;  // Reduced from 48f
+    [field: SerializeField] public float BaseWallJumpForce { get; private set; } = 6f;  // Reduced from 60f
+    [field: SerializeField] public float BaseJumpForce { get; private set; } = 20f;  // Increased from 16.25f for higher jumps
+    [field: SerializeField] public float BaseDashSpeed { get; private set; } = 32f;  // Reduced from 320f
+    
+    // Movement values (no screen scaling)
+    public float MoveSpeed => BaseMoveSpeed;
+    public float AirControlSpeed => BaseAirControlSpeed;
+    public float WallJumpForce => BaseWallJumpForce;
+    public float JumpForce => BaseJumpForce;
+    public float DashSpeed => BaseDashSpeed;
+    
+    // Physics values that should scale with screen size (only for collision detection)
+    [SerializeField] private float baseGroundCheckRadius = 0.2f;
+    [SerializeField] private float baseWallCheckDistance = 0.04f;
+    [SerializeField] private float baseMaxHorizontalSpeed = 16f;  // Reduced from 160f
+    [SerializeField] private float baseMaxVerticalSpeed = 22.5f;  // Increased from 18f for 25% higher jumps
+    [SerializeField] private float baseMaxFallSpeed = 20f;  // Increased from 13.6f for faster falls
+    
+    // Scaled physics values (only for collision detection)
+    public float GroundCheckRadius => baseGroundCheckRadius * screenScaleFactor;
+    public float WallCheckDistance => baseWallCheckDistance * screenScaleFactor;
+    public float MaxHorizontalSpeed => baseMaxHorizontalSpeed;
+    public float MaxVerticalSpeed => baseMaxVerticalSpeed;
+    public float MaxFallSpeed => baseMaxFallSpeed;
 
     [Header("Collider Settings")]
-    [SerializeField] public CapsuleCollider2D playerCollider; // Changed to public
-    [SerializeField] private Vector2 standingColliderSize = new Vector2(1f, 2f); // Example
-    [SerializeField] private Vector2 standingColliderOffset = new Vector2(0f, 0f); // Example
-    [SerializeField] private Vector2 crouchingColliderSize = new Vector2(1f, 1f); // Example
-    [SerializeField] private Vector2 crouchingColliderOffset = new Vector2(0f, -0.5f); // Example
-    [SerializeField] private float standUpCheckDistance = 0.1f; // Distance above collider to check
-    [SerializeField] public LayerMask groundLayer; // Changed to public
+    [SerializeField] public CapsuleCollider2D playerCollider;
+    [SerializeField] private Vector2 standingColliderSize = new Vector2(1f, 2f);
+    [SerializeField] private Vector2 standingColliderOffset = new Vector2(0f, 0f);
+    [SerializeField] private Vector2 crouchingColliderSize = new Vector2(1f, 1f);
+    [SerializeField] private Vector2 crouchingColliderOffset = new Vector2(0f, -0.5f);
+    [SerializeField] private float standUpCheckDistance = 0.1f;
+    [SerializeField] public LayerMask groundLayer;
 
     [Header("Ground Check Settings")]
     [SerializeField] private Transform groundCheckPoint;
-    [SerializeField] private float groundCheckRadius = 0.2f;
-    [SerializeField] private float groundCheckOffset = 0.1f; // Offset from feet for ground check
+    [SerializeField] private float groundCheckOffset = 0.1f;
 
     [Header("Wall Check Settings")]
-    [SerializeField] private float wallCheckDistance = 0.04f;
-    [SerializeField] private float wallCheckOffset = 0.1f; // Offset from center for wall check
+    [SerializeField] private float wallCheckOffset = 0.1f;
 
     [Header("Movement Deceleration")]
-    [SerializeField] private float groundedDecelerationX = 20f;
-    [SerializeField] private float airborneDecelerationX = 10f;
-    [SerializeField] private float groundedDecelerationY = 30f;
-    [SerializeField] private float airborneDecelerationY = 15f;
-    [SerializeField] private float airborneDecelerationYDown = 10f; // Lower deceleration when falling
-
-    [Header("Max Speeds")]
-    [SerializeField] private float maxHorizontalSpeed = 10f;
-    [SerializeField] private float maxVerticalSpeed = 15f;
-    [Tooltip("The maximum falling speed. Higher values = faster falls, but may cause collision issues.")]
-    [SerializeField] public float maxFallSpeed = 17f; // Made public to be accessible from FallState
+    [SerializeField] private float groundedDecelerationX = 8f;  // Reduced from 80f
+    [SerializeField] private float airborneDecelerationX = 4f;  // Reduced from 40f
+    [SerializeField] private float groundedDecelerationY = 12f;  // Reduced from 120f
+    [SerializeField] private float airborneDecelerationY = 6f;  // Reduced from 60f
+    [SerializeField] private float airborneDecelerationYDown = 1f;  // Reduced from 40f for less air resistance when falling
+    [SerializeField] private float fallAcceleration = 1.5f;  // New parameter for fall acceleration
 
     [Header("Jump Settings")]
-    [SerializeField] private float jumpCooldown = 0.67f; // 2/3 of a second
-    [field: SerializeField] public float JumpForce { get; private set; } = 10f; // Single jump force
-    [field: SerializeField] public float WallJumpAngle { get; private set; } = 30f; // Wall jump angle in degrees (was 45 degrees)
+    [SerializeField] private float jumpCooldown = 0.1f;  // Reduced from 0.67f for more responsive jumps
+    [field: SerializeField] public int MaxJumps { get; private set; } = 1;
+    public int JumpsRemaining { get; set; }
+    [field: SerializeField] public float WallJumpAngle { get; private set; } = 35f;  // Reduced from 45f for better control
+    [field: SerializeField] public float WallJumpHorizontalForce { get; private set; } = 10f;  // Adjusted for better control
+    [field: SerializeField] public float WallJumpVerticalForce { get; private set; } = 8f;
+    [field: SerializeField] public float WallJumpBufferTime { get; private set; } = 0.1f;  // New parameter for wall jump buffer
     private float lastJumpTime = 0f;
+    private float wallJumpBufferTimer = 0f;
+    private bool wallJumpBuffered = false;
+    private bool wasJumpPressed = false;  // Track previous jump button state
 
     [Header("Dash Settings")]
-    [field: SerializeField] public float DashSpeed { get; private set; } = 20f;
     [field: SerializeField] public float DashDuration { get; private set; } = 0.2f;
     [field: SerializeField] public float DashCooldown { get; private set; } = 0.45f;
     [field: SerializeField] public bool AllowAirDash { get; private set; } = true;
     [field: SerializeField] public int MaxAirDashes { get; private set; } = 1;
+    [field: SerializeField] public float DashForce { get; private set; } = 32f;  // New parameter for dash force
     private float lastDashTime = 0f;
     private int airDashesRemaining = 0;
     private bool isDashing = false;
@@ -112,9 +142,8 @@ public class PlayerStateMachine : MonoBehaviour
     private const float DIRECTION_CHANGE_DELAY = 0.1f; // 1/10 of a second delay
 
     public bool IsFacingRight { get; private set; } = true;
-    public PlayerBaseState CurrentState { get; private set; }
-
     private PlayerBaseState currentState;
+    public PlayerBaseState CurrentState => currentState; // Make it a read-only property
 
     // State registry for extensibility
     private Dictionary<string, PlayerBaseState> stateRegistry = new Dictionary<string, PlayerBaseState>();
@@ -304,13 +333,33 @@ public class PlayerStateMachine : MonoBehaviour
 
     private void Awake()
     {
+        // Calculate screen scale factor based on camera height
+        Camera mainCamera = Camera.main;
+        if (mainCamera != null)
+        {
+            // Calculate scale factor based on camera height in Unity units
+            float cameraHeight = mainCamera.orthographicSize * 2f; // Full height in Unity units
+            screenScaleFactor = cameraHeight / REFERENCE_HEIGHT;
+            
+            // Ensure the camera's orthographic size is set correctly
+            if (mainCamera.orthographicSize != REFERENCE_HEIGHT / 2f)
+            {
+                mainCamera.orthographicSize = REFERENCE_HEIGHT / 2f;
+            }
+        }
+        else
+        {
+            Debug.LogWarning("Main camera not found, using default scale factor");
+            screenScaleFactor = 1f;
+        }
+        
         // Get Components - do this first
         RB = GetComponent<Rigidbody2D>();
-        if (RB == null)
+        if (RB != null)
         {
-            Debug.LogError("Rigidbody2D component not found on the GameObject!", this);
-            RB = gameObject.AddComponent<Rigidbody2D>();
-            Debug.Log("Added a Rigidbody2D component automatically.");
+            // Configure physics settings
+            RB.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+            RB.gravityScale = 2.2f; // Reduced from 2.5f for slightly less weighty falls
         }
         
         // Initialize input reader before state creation
@@ -336,9 +385,17 @@ public class PlayerStateMachine : MonoBehaviour
                 Debug.LogWarning("No CapsuleCollider2D found, adding one automatically.", this);
             }
             
-            // Store initial size/offset
-            if (standingColliderSize == Vector2.zero) standingColliderSize = playerCollider.size;
-            if (standingColliderOffset == Vector2.zero) playerCollider.offset = Vector2.zero;
+            // Scale collider size based on screen size
+            if (standingColliderSize == Vector2.zero)
+            {
+                standingColliderSize = playerCollider.size;
+                standingColliderSize *= screenScaleFactor;
+            }
+            if (standingColliderOffset == Vector2.zero)
+            {
+                standingColliderOffset = Vector2.zero;
+                standingColliderOffset.y *= screenScaleFactor;
+            }
         }
         
         // Find ground check point if not assigned
@@ -369,9 +426,35 @@ public class PlayerStateMachine : MonoBehaviour
     {
         try
         {
-            // Create state registry
-            stateRegistry = new Dictionary<string, PlayerBaseState>();
-            
+            // First ensure all required components are initialized
+            if (RB == null)
+            {
+                RB = GetComponent<Rigidbody2D>();
+                if (RB == null)
+                {
+                    RB = gameObject.AddComponent<Rigidbody2D>();
+                    Debug.LogWarning("Added Rigidbody2D component automatically");
+                }
+            }
+
+            if (InputReader == null)
+            {
+                InputReader = new InputReader();
+                if (InputReader == null)
+                {
+                    throw new System.Exception("Failed to initialize InputReader");
+                }
+            }
+
+            if (Animator == null)
+            {
+                Animator = GetComponentInChildren<Animator>();
+                if (Animator == null)
+                {
+                    Debug.LogWarning("Animator component not found in children. Animations will not play.");
+                }
+            }
+
             // Initialize all states
             IdleState = new PlayerIdleState(this);
             WalkState = new WalkState(this);
@@ -379,43 +462,44 @@ public class PlayerStateMachine : MonoBehaviour
             JumpState = new JumpState(this);
             FallState = new FallState(this);
             WallClingState = new WallClingState(this);
+            DashState = new PlayerDashState(this);
             ShootState = new ShootState(this);
             SlideState = new SlideState(this);
-            DashState = new PlayerDashState(this);
             
-            // Check if all states were initialized successfully
-            if (IdleState == null || WalkState == null || RunState == null || JumpState == null || 
-                FallState == null || WallClingState == null || ShootState == null || SlideState == null || 
-                DashState == null)
-            {
-                Debug.LogError("One or more states failed to initialize!");
-                return;
-            }
+            // Verify all states are initialized
+            if (IdleState == null) throw new System.Exception("Failed to initialize IdleState");
+            if (WalkState == null) throw new System.Exception("Failed to initialize WalkState");
+            if (RunState == null) throw new System.Exception("Failed to initialize RunState");
+            if (JumpState == null) throw new System.Exception("Failed to initialize JumpState");
+            if (FallState == null) throw new System.Exception("Failed to initialize FallState");
+            if (WallClingState == null) throw new System.Exception("Failed to initialize WallClingState");
+            if (DashState == null) throw new System.Exception("Failed to initialize DashState");
+            if (ShootState == null) throw new System.Exception("Failed to initialize ShootState");
+            if (SlideState == null) throw new System.Exception("Failed to initialize SlideState");
             
-            // Register states
-            stateRegistry[nameof(PlayerIdleState)] = IdleState;
-            stateRegistry[nameof(WalkState)] = WalkState;
-            stateRegistry[nameof(RunState)] = RunState;
-            stateRegistry[nameof(JumpState)] = JumpState;
-            stateRegistry[nameof(FallState)] = FallState;
-            stateRegistry[nameof(WallClingState)] = WallClingState;
-            stateRegistry[nameof(ShootState)] = ShootState;
-            stateRegistry[nameof(SlideState)] = SlideState;
-            stateRegistry[nameof(PlayerDashState)] = DashState;
+            // Set initial state
+            currentState = IdleState;
+            currentState.Enter();
             
             // Set default values
-            currentState = IdleState;
-            CurrentState = IdleState;
             JumpsRemaining = MaxJumps;
             airDashesRemaining = MaxAirDashes;
             
-            #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            Debug.Log("State machine initialized successfully!");
-            #endif
+            Debug.Log("State machine initialized successfully");
         }
         catch (System.Exception e)
         {
             Debug.LogError($"Failed to initialize state machine: {e.Message}");
+            // Try to recover by creating at least the idle state
+            if (IdleState == null)
+            {
+                IdleState = new PlayerIdleState(this);
+                if (IdleState != null)
+                {
+                    currentState = IdleState;
+                    currentState.Enter();
+                }
+            }
         }
     }
 
@@ -466,7 +550,7 @@ public class PlayerStateMachine : MonoBehaviour
                 Physics2D.positionIterations = iterations;
                 
                 // Emergency raycast for extreme speeds
-                if (fallSpeed > maxFallSpeed * 0.88f) // Set threshold to 88% of max fall speed
+                if (fallSpeed > MaxFallSpeed * 0.88f) // Set threshold to 88% of max fall speed
                 {
                     // Get position for ground check
                     Vector2 checkPosition = transform.position;
@@ -584,16 +668,57 @@ public class PlayerStateMachine : MonoBehaviour
         }
 
         // Handle dash input first
-        if (InputReader != null && DashState != null && InputReader.IsDashPressed() && PlayerDashState.CanDash())
+        if (InputReader != null && DashState != null && InputReader.IsDashPressed() && CanDash())
         {
             StartDash(IsFacingRight ? 1f : -1f);
             return;
         }
 
         // Handle other state transitions
-        if (CurrentState != null)
+        if (currentState == null)
         {
-            CurrentState.Tick(Time.deltaTime);
+            Debug.LogWarning("Current state is null, reinitializing state machine");
+            InitializeStateMachine();
+            return;
+        }
+
+        // Check for jump input (only on initial press)
+        bool isJumpPressed = InputReader != null && InputReader.IsJumpPressed();
+        if (isJumpPressed && !wasJumpPressed && CanJump())
+        {
+            SwitchState(JumpState);
+        }
+        wasJumpPressed = isJumpPressed;
+
+        // Update wall jump buffer
+        if (wallJumpBuffered)
+        {
+            wallJumpBufferTimer -= Time.deltaTime;
+            if (wallJumpBufferTimer <= 0f)
+            {
+                wallJumpBuffered = false;
+            }
+            else if (IsTouchingWall() && CanJump())
+            {
+                ApplyWallJump();
+            }
+        }
+
+        // Update current state
+        try
+        {
+            currentState.Tick(Time.deltaTime);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[PlayerStateMachine] Error during Tick of state {currentState.GetType().Name}: {e.Message}");
+            
+            // If Tick fails, try falling back to IdleState
+            if (currentState != IdleState && IdleState != null)
+            {
+                Debug.Log("[PlayerStateMachine] Falling back to IdleState after Tick error");
+                SwitchState(IdleState);
+            }
         }
     }
 
@@ -605,9 +730,7 @@ public class PlayerStateMachine : MonoBehaviour
             return;
         }
 
-        PlayerBaseState oldState = currentState;
-        
-        // Exit current state if it exists
+        // Exit current state
         if (currentState != null)
         {
             try
@@ -622,8 +745,6 @@ public class PlayerStateMachine : MonoBehaviour
 
         // Switch to new state
         currentState = newState;
-        CurrentState = newState; // Set the public CurrentState property
-        
         try
         {
             currentState.Enter();
@@ -631,37 +752,11 @@ public class PlayerStateMachine : MonoBehaviour
         catch (System.Exception e)
         {
             Debug.LogError($"[PlayerStateMachine] Error during Enter of state {currentState.GetType().Name}: {e.Message}");
-            
-            // Fallback to IdleState if available
+            // If Enter fails, try falling back to IdleState
             if (newState != IdleState && IdleState != null)
             {
-                Debug.Log("[PlayerStateMachine] Falling back to IdleState after error");
                 currentState = IdleState;
-                CurrentState = IdleState;
-                try
-                {
-                    currentState.Enter();
-                }
-                catch
-                {
-                    Debug.LogError("[PlayerStateMachine] Failed to enter fallback IdleState!");
-                }
-            }
-        }
-        
-        // Track state transition time
-        stateEnterTime = Time.time;
-        
-        // Only trigger event if both states are valid and there's a subscriber
-        if (oldState != null && OnStateChanged != null)
-        {
-            try
-            {
-                OnStateChanged(oldState, currentState);
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogWarning($"[PlayerStateMachine] Error in state transition event handler: {e.Message}");
+                currentState.Enter();
             }
         }
     }
@@ -693,53 +788,45 @@ public class PlayerStateMachine : MonoBehaviour
             return state;
         return null;
     }
+
     // Robust ground check using OverlapCircle with additional safety checks for high speeds
     public bool IsGrounded()
     {
-        // During coyote time after jump, always return false
         if (jumpGroundedGraceTimer > 0f)
             return false;
 
         if (groundCheckPoint == null)
         {
-            Debug.LogWarning("Ground Check Point not assigned in the Inspector! Add a child GameObject with this name or assign it in the Inspector.", this);
+            Debug.LogWarning("Ground Check Point not assigned in the Inspector!", this);
             return false;
         }
 
-        // Standard ground check using OverlapCircle with moderate radius
-        Vector2 checkPosition = groundCheckPoint.position + new Vector3(0, groundCheckOffset, 0);
-        bool grounded = Physics2D.OverlapCircle(checkPosition, groundCheckRadius * 1.25f, groundLayer);
+        Vector2 checkPosition = groundCheckPoint.position + new Vector3(0, groundCheckOffset * screenScaleFactor, 0);
+        bool grounded = Physics2D.OverlapCircle(checkPosition, GroundCheckRadius * 1.25f, groundLayer);
         
-        // Use a raycast check for precision with high-speed falls
         if (!grounded && RB != null && RB.linearVelocity.y < 0)
         {
-            // Calculate appropriate ray length based on velocity
             float fallSpeed = Mathf.Abs(RB.linearVelocity.y);
-            float fallSpeedFactor = fallSpeed / 10f; // Scale factor based on fall speed
-            float rayLength = groundCheckRadius * 2.5f * Mathf.Max(1f, fallSpeedFactor);
+            float fallSpeedFactor = fallSpeed / (10f * screenScaleFactor);
+            float rayLength = GroundCheckRadius * 2.5f * Mathf.Max(1f, fallSpeedFactor);
             
-            // Use multiple raycasts for better coverage but with narrower spread
-            float spread = 0.08f; // Reduced from 0.1f
+            float spread = 0.08f * screenScaleFactor;
             Vector2 leftCheck = checkPosition + new Vector2(-spread, 0);
             Vector2 centerCheck = checkPosition;
             Vector2 rightCheck = checkPosition + new Vector2(spread, 0);
             
-            // Cast three rays for coverage
             RaycastHit2D hitLeft = Physics2D.Raycast(leftCheck, Vector2.down, rayLength, groundLayer);
             RaycastHit2D hitCenter = Physics2D.Raycast(centerCheck, Vector2.down, rayLength, groundLayer);
             RaycastHit2D hitRight = Physics2D.Raycast(rightCheck, Vector2.down, rayLength, groundLayer);
             
-            // Visualize the raycasts in the editor only in debug mode
             #if UNITY_EDITOR
             Debug.DrawRay(leftCheck, Vector2.down * rayLength, hitLeft.collider != null ? Color.green : Color.red, 0.1f);
             Debug.DrawRay(centerCheck, Vector2.down * rayLength, hitCenter.collider != null ? Color.green : Color.red, 0.1f);
             Debug.DrawRay(rightCheck, Vector2.down * rayLength, hitRight.collider != null ? Color.green : Color.red, 0.1f);
             #endif
             
-            // If any ray hits ground, we need to determine proper positioning
             if (hitLeft.collider != null || hitCenter.collider != null || hitRight.collider != null)
             {
-                // Find the closest hit for positioning
                 float closestDistance = float.MaxValue;
                 RaycastHit2D closestHit = default;
                 
@@ -761,50 +848,27 @@ public class PlayerStateMachine : MonoBehaviour
                     closestHit = hitRight;
                 }
                 
-                // Calculate more cautious snapping thresholds
-                float snapDistance = 0.08f * Mathf.Max(1f, fallSpeedFactor * 0.7f); // Less aggressive scaling
+                float snapDistance = 0.08f * screenScaleFactor * Mathf.Max(1f, fallSpeedFactor * 0.7f);
                 
-                // Only snap if we're very close to the ground or falling extremely fast
                 if (closestHit.collider != null && 
-                    (closestDistance < snapDistance || RB.linearVelocity.y < -18f)) // Higher threshold for auto-snap
+                    (closestDistance < snapDistance || RB.linearVelocity.y < -18f * screenScaleFactor))
                 {
-                    // Calculate the exact position we need to place the player at
-                    float yAdjust = 0.01f; // Minimal offset
+                    float yAdjust = 0.01f * screenScaleFactor;
                     float targetY = closestHit.point.y + yAdjust;
                     
-                    // Don't actually move the player if we're moving too slowly or the distance is large
-                    if (fallSpeed > 10f || closestDistance < 0.05f)
+                    if (fallSpeed > 10f * screenScaleFactor || closestDistance < 0.05f * screenScaleFactor)
                     {
-                        // Position adjustment - move player to exactly touch the ground
                         transform.position = new Vector3(transform.position.x, targetY + playerCollider.bounds.extents.y, transform.position.z);
                         
-                        // Reduce vertical velocity rather than zeroing it immediately
-                        if (fallSpeed > 15f)
+                        if (fallSpeed > 15f * screenScaleFactor)
                         {
-                            // Use a damping approach for high speeds
                             float dampingFactor = 0.2f;
                             RB.linearVelocity = new Vector2(RB.linearVelocity.x, -fallSpeed * dampingFactor);
                         }
-                        
-                        #if UNITY_EDITOR || DEVELOPMENT_BUILD
-                        Debug.Log($"Precise ground positioning. Distance: {closestDistance}, Speed: {fallSpeed}");
-                        #endif
                     }
                 }
                 
-                // We consider ourselves grounded if we're within a reasonable distance
                 grounded = closestDistance < snapDistance * 1.5f;
-            }
-        }
-        
-        // Warn if grounded while moving up (likely ground check is inside collider)
-        if (grounded && RB != null && RB.linearVelocity.y > 0.1f)
-        {
-            // Only warn once per session about this issue
-            if (!warnedAboutGroundCheck)
-            {
-                Debug.LogWarning("[PlayerStateMachine] IsGrounded() is true while moving upward. Adjust groundCheckPoint position or groundCheckRadius in the Inspector.");
-                warnedAboutGroundCheck = true;
             }
         }
         
@@ -819,11 +883,9 @@ public class PlayerStateMachine : MonoBehaviour
             return false;
         }
         
-        // Wall detection using 2D raycast
         Vector2 direction = transform.localScale.x > 0 ? Vector2.right : Vector2.left;
-        Vector2 checkPosition = playerCollider.bounds.center + new Vector3(0, wallCheckOffset, 0);
+        Vector2 checkPosition = playerCollider.bounds.center + new Vector3(0, wallCheckOffset * screenScaleFactor, 0);
         
-        // Use multiple raycasts for more reliable detection
         float height = playerCollider.bounds.size.y;
         float raySpacing = height / 3;
         float topOffset = height * 0.4f;
@@ -832,13 +894,12 @@ public class PlayerStateMachine : MonoBehaviour
         Vector2 midCheckPos = checkPosition;
         Vector2 bottomCheckPos = checkPosition - new Vector2(0, topOffset);
         
-        float rayDistance = playerCollider.bounds.extents.x + wallCheckDistance;
+        float rayDistance = playerCollider.bounds.extents.x + WallCheckDistance;
         
         RaycastHit2D hitTop = Physics2D.Raycast(topCheckPos, direction, rayDistance, groundLayer);
         RaycastHit2D hitMid = Physics2D.Raycast(midCheckPos, direction, rayDistance, groundLayer);
         RaycastHit2D hitBottom = Physics2D.Raycast(bottomCheckPos, direction, rayDistance, groundLayer);
         
-        // Visualize raycasts in editor only
         #if UNITY_EDITOR
         Color rayColor = (hitTop.collider != null || hitMid.collider != null || hitBottom.collider != null) ? Color.green : Color.red;
         Debug.DrawRay(topCheckPos, direction * rayDistance, rayColor, 0.1f);
@@ -846,7 +907,6 @@ public class PlayerStateMachine : MonoBehaviour
         Debug.DrawRay(bottomCheckPos, direction * rayDistance, rayColor, 0.1f);
         #endif
         
-        // Return true if any ray hit a wall
         return hitTop.collider != null || hitMid.collider != null || hitBottom.collider != null;
     }
 
@@ -856,18 +916,15 @@ public class PlayerStateMachine : MonoBehaviour
         
         Vector2 velocity = rb.linearVelocity;
         
-        // Clamp horizontal velocity
-        velocity.x = Mathf.Clamp(velocity.x, -maxHorizontalSpeed, maxHorizontalSpeed);
+        velocity.x = Mathf.Clamp(velocity.x, -MaxHorizontalSpeed, MaxHorizontalSpeed);
         
-        // Clamp vertical velocity - different limits for up and down
         if (velocity.y > 0)
         {
-            velocity.y = Mathf.Min(velocity.y, maxVerticalSpeed);
+            velocity.y = Mathf.Min(velocity.y, MaxVerticalSpeed);
         }
         else
         {
-            // Use the configurable maxFallSpeed from the inspector
-            velocity.y = Mathf.Max(velocity.y, -maxFallSpeed);
+            velocity.y = Mathf.Max(velocity.y, -MaxFallSpeed);
         }
         
         rb.linearVelocity = velocity;
@@ -875,13 +932,31 @@ public class PlayerStateMachine : MonoBehaviour
 
     public bool CanJump()
     {
-        return Time.time >= lastJumpTime + jumpCooldown;
+        // Can always jump on ground or while wall clinging
+        if (IsGrounded() || IsTouchingWall())
+            return true;
+            
+        // In air, need to have jumps remaining
+        return JumpsRemaining > 0;
     }
 
     public void OnJumpStart()
     {
         lastJumpTime = Time.time;
         jumpGroundedGraceTimer = jumpGroundedGraceDuration;
+        
+        // Only use up a jump if in the air (not grounded and not wall clinging)
+        if (!IsGrounded() && !IsTouchingWall())
+        {
+            JumpsRemaining--;
+            Debug.Log($"[PlayerStateMachine] Air jump used. Jumps remaining: {JumpsRemaining}");
+        }
+        else
+        {
+            // Reset jumps when jumping from ground or wall
+            JumpsRemaining = MaxJumps;
+            Debug.Log($"[PlayerStateMachine] Ground/Wall jump. Jumps reset to: {JumpsRemaining}");
+        }
     }
 
     public void OnJumpEnd()
@@ -901,29 +976,40 @@ public class PlayerStateMachine : MonoBehaviour
 
     public void StartDash(float direction)
     {
+        if (!CanDash()) return;
+
         isDashing = true;
         dashEndTime = Time.time + DashDuration;
+        lastDashTime = Time.time;
         
-        // Switch to dash state instead of just setting velocity
+        // Use up air dash if in the air
+        if (!IsGrounded() && !IsTouchingWall() && AllowAirDash)
+        {
+            airDashesRemaining--;
+        }
+        
+        // Apply dash force
+        Vector2 dashForce = new Vector2(direction * DashForce, 0f);
+        RB.linearVelocity = Vector2.zero; // Reset velocity first
+        RB.AddForce(dashForce, ForceMode2D.Impulse);
+        
+        // Switch to dash state
         SwitchState(DashState);
     }
 
     public void EndDash()
     {
         isDashing = false;
-        // Restore normal drag
-        RB.linearDamping = 1f;
         
-        if (InputReader.GetMovementInput().x * Mathf.Sign(RB.linearVelocity.x) <= 0)
+        // Calculate post-dash velocity
+        Vector2 currentVelocity = RB.linearVelocity;
+        float horizontalSpeed = Mathf.Abs(currentVelocity.x);
+        
+        if (horizontalSpeed > MoveSpeed)
         {
-            // If not moving in dash direction, set to 0
-            RB.linearVelocity = new Vector2(0f, RB.linearVelocity.y);
-        }
-        else
-        {
-            // If still moving in dash direction, set to normal speed
-            float normalSpeed = GetHorizontalSpeed(IsGrounded(), IsTouchingWall() && RB.linearVelocity.y <= 0);
-            RB.linearVelocity = new Vector2(Mathf.Sign(RB.linearVelocity.x) * normalSpeed, RB.linearVelocity.y);
+            // If moving faster than normal speed, gradually reduce to normal speed
+            float targetSpeed = MoveSpeed * Mathf.Sign(currentVelocity.x);
+            RB.linearVelocity = new Vector2(targetSpeed, currentVelocity.y);
         }
     }
 
@@ -939,9 +1025,11 @@ public class PlayerStateMachine : MonoBehaviour
         if (!cooldownElapsed)
             return false;
             
-        if (IsGrounded())
+        // Can always dash on ground or while wall clinging
+        if (IsGrounded() || IsTouchingWall())
             return true;
             
+        // In air, need to have air dashes remaining
         return AllowAirDash && airDashesRemaining > 0;
     }
 
@@ -960,7 +1048,11 @@ public class PlayerStateMachine : MonoBehaviour
 
     public void ResetAirDash()
     {
-        airDashesRemaining = MaxAirDashes;
+        // Only reset air dashes when touching ground or wall
+        if (IsGrounded() || IsTouchingWall())
+        {
+            airDashesRemaining = MaxAirDashes;
+        }
     }
 
     public Vector2 ApplyDeceleration(Vector2 currentVelocity, bool isGrounded, float deltaTime)
@@ -968,26 +1060,30 @@ public class PlayerStateMachine : MonoBehaviour
         float decelerationX = GetDecelerationX(isGrounded);
         float decelerationY = GetDecelerationY(isGrounded, currentVelocity.y > 0);
         
-        // Scale deceleration to be applied over 1/100th of a second
-        float timeScale = deltaTime / 0.01f;
+        // Calculate force based on current velocity and mass
+        float mass = RB.mass;
+        Vector2 force = Vector2.zero;
         
-        // Only apply deceleration if moving in that direction
-        float forceX = currentVelocity.x != 0 ? -Mathf.Sign(currentVelocity.x) * decelerationX * timeScale : 0f;
-        
-        // Apply vertical deceleration only in the correct direction
-        float forceY = 0f;
-        if (currentVelocity.y > 0)
+        // Apply horizontal deceleration as a force
+        if (Mathf.Abs(currentVelocity.x) > 0.01f)
         {
-            // Only apply upward deceleration when moving up
-            forceY = -currentVelocity.y * decelerationY * timeScale;
-        }
-        else if (currentVelocity.y < 0)
-        {
-            // Only apply downward deceleration when moving down
-            forceY = -currentVelocity.y * airborneDecelerationYDown * timeScale;
+            float forceX = -Mathf.Sign(currentVelocity.x) * decelerationX * mass;
+            force.x = forceX;
         }
         
-        return new Vector2(forceX, forceY);
+        // Apply vertical deceleration as a force
+        if (currentVelocity.y > 0.01f)
+        {
+            // Upward deceleration
+            force.y = -currentVelocity.y * decelerationY * mass;
+        }
+        else if (currentVelocity.y < -0.01f)
+        {
+            // Downward acceleration instead of deceleration
+            force.y = -fallAcceleration * mass;
+        }
+        
+        return force;
     }
 
     public void CheckGrounded()
@@ -998,6 +1094,13 @@ public class PlayerStateMachine : MonoBehaviour
             // Reset jumps and air dashes when grounded
             JumpsRemaining = MaxJumps;
             ResetAirDash();
+            
+            // Preserve horizontal velocity when landing
+            if (RB != null)
+            {
+                Vector2 currentVelocity = RB.linearVelocity;
+                RB.linearVelocity = new Vector2(currentVelocity.x, 0f);
+            }
         }
     }
 
@@ -1007,4 +1110,49 @@ public class PlayerStateMachine : MonoBehaviour
     public float GetHorizontalSpeed(bool isGrounded, bool isWallClinging) => 
         isGrounded ? MoveSpeed : 
         (isWallClinging ? MoveSpeed * 0.5f : AirControlSpeed);
+
+    public void ApplyWallJump()
+    {
+        if (!IsTouchingWall()) return;
+
+        // Calculate wall jump direction
+        float wallDirection = IsFacingRight ? -1f : 1f;
+        
+        // Convert angle to radians
+        float angleInRadians = WallJumpAngle * Mathf.Deg2Rad;
+        
+        // Calculate the force components with better control
+        Vector2 jumpForce = new Vector2(
+            wallDirection * WallJumpHorizontalForce * Mathf.Cos(angleInRadians),
+            WallJumpVerticalForce * Mathf.Sin(angleInRadians)
+        );
+        
+        // Reset velocity and apply force
+        RB.linearVelocity = Vector2.zero;
+        RB.AddForce(jumpForce, ForceMode2D.Impulse);
+        
+        // Update facing direction
+        IsFacingRight = !IsFacingRight;
+        transform.localScale = new Vector3(IsFacingRight ? 1 : -1, 1, 1);
+        
+        // Start jump cooldown and grace period
+        lastJumpTime = Time.time;
+        jumpGroundedGraceTimer = jumpGroundedGraceDuration;
+        
+        // Reset wall jump buffer
+        wallJumpBuffered = false;
+        wallJumpBufferTimer = 0f;
+        
+        // Switch to jump state
+        SwitchState(JumpState);
+    }
+
+    public void BufferWallJump()
+    {
+        if (IsTouchingWall())
+        {
+            wallJumpBuffered = true;
+            wallJumpBufferTimer = WallJumpBufferTime;
+        }
+    }
 }

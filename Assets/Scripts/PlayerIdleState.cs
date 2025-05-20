@@ -19,6 +19,13 @@ public class PlayerIdleState : PlayerBaseState
 
     public override void Tick(float deltaTime)
     {
+        // Ensure we have all required components
+        if (stateMachine == null || stateMachine.RB == null || stateMachine.InputReader == null)
+        {
+            Debug.LogError("[PlayerIdleState] Required components are null. Cannot process state.");
+            return;
+        }
+
         // --- NEW: Check for loss of ground or wall contact ---
         if (!stateMachine.IsGrounded())
         {
@@ -35,10 +42,10 @@ public class PlayerIdleState : PlayerBaseState
         }
 
         // Check for Shoot input
-        if (stateMachine.InputReader.IsShootPressed()) // Use InputReader property
+        if (stateMachine.InputReader.IsShootPressed())
         {
             stateMachine.SwitchState(stateMachine.ShootState);
-            return; // Exit early
+            return;
         }
 
         // Check for Jump input
@@ -51,10 +58,10 @@ public class PlayerIdleState : PlayerBaseState
         }
 
         // Check for movement input to transition to Walk/Run
-        Vector2 moveInput = stateMachine.InputReader.GetMovementInput(); // Use InputReader property
+        Vector2 moveInput = stateMachine.InputReader.GetMovementInput();
         if (moveInput != Vector2.zero)
         {
-            if (stateMachine.InputReader.IsRunPressed()) // Use InputReader property
+            if (stateMachine.InputReader.IsRunPressed())
                 stateMachine.SwitchState(stateMachine.RunState);
             else
                 stateMachine.SwitchState(stateMachine.WalkState);

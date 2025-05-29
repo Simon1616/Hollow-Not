@@ -23,6 +23,10 @@ public class WallClingState : PlayerBaseState
 
     public override void Enter()
     {
+        // Reset jumps and air dashes when starting to wall cling
+        stateMachine.ResetDoubleJumps();
+        stateMachine.ResetAirDash();
+        
         // Store original gravity scale
         originalGravityScale = stateMachine.RB.gravityScale;
         
@@ -36,134 +40,76 @@ public class WallClingState : PlayerBaseState
         horizontalInputTime = Time.time;
         lastMoveInput = Vector2.zero;
         
-        // Play wall cling animation if available
-        stateMachine.SafePlayAnimation("Cling");
+        // Play wall cling animation
+        stateMachine.SafePlayAnimation("WallCling");
         
-        // Reset double jump charge when touching wall
-        stateMachine.JumpsRemaining = stateMachine.MaxJumps;
-        
-        // Snap to wall
-        SnapToWall();
+        #if UNITY_EDITOR || DEVELOPMENT_BUILD
+        Debug.Log("[WallClingState] Entering Wall Cling State");
+        #endif
     }
 
     private void SnapToWall()
     {
-        float direction = stateMachine.IsFacingRight ? 1f : -1f;
-        RaycastHit2D hit = Physics2D.Raycast(
-            stateMachine.RB.position,
-            new Vector2(direction, 0),
-            wallSnapDistance,
-            stateMachine.groundLayer
-        );
+        if (stateMachine.RB == null) return;
 
-        if (hit.collider != null)
-        {
-            // Calculate target position (snapped to wall)
-            Vector2 targetPosition = new Vector2(
-                hit.point.x - (direction * stateMachine.playerCollider.bounds.extents.x),
-                stateMachine.RB.position.y
-            );
-
-            // Smoothly move to target position
-            stateMachine.RB.position = Vector2.Lerp(
-                stateMachine.RB.position,
-                targetPosition,
-                wallSnapSpeed * Time.deltaTime
-            );
-        }
+        // Get wall direction
+        float wallDirection = stateMachine.IsFacingRight ? 1f : -1f;
+        
+        // Calculate target position
+        float targetX = stateMachine.RB.position.x + (wallDirection * stateMachine.WallCheckDistance);
+        
+        // Smoothly move to wall
+        Vector2 targetPosition = new Vector2(targetX, stateMachine.RB.position.y);
+        stateMachine.RB.position = Vector2.Lerp(stateMachine.RB.position, targetPosition, 0.5f);
+        
+        // Reset double jump charge when touching wall
+        stateMachine.ResetDoubleJumps();
     }
 
     public override void Tick(float deltaTime)
     {
-        // Check for Shoot input first
-        if (stateMachine.InputReader.IsShootPressed())
-        {
-            stateMachine.SwitchState(stateMachine.ShootState);
-            return;
-        }
-
-        // Get movement input
-        Vector2 currentMoveInput = stateMachine.InputReader.GetMovementInput();
-        
-        // Check if we should stick to the wall
-        float wallDirection = stateMachine.IsFacingRight ? 1f : -1f;
-        isStickingToWall = currentMoveInput.x * wallDirection > 0;
-        
-        if (stateMachine.RB != null)
-        {
-            // Apply wall stickiness when holding towards wall
-            if (isStickingToWall)
-            {
-                // Reduce vertical velocity when sticking
-                stateMachine.RB.linearVelocity = new Vector2(
-                    stateMachine.RB.linearVelocity.x,
-                    Mathf.Lerp(stateMachine.RB.linearVelocity.y, -slideSpeed, wallClingStickiness)
-                );
-            }
-            else
-            {
-                // Normal slide when not sticking
-                stateMachine.RB.linearVelocity = new Vector2(
-                    stateMachine.RB.linearVelocity.x,
-                    -slideSpeed
-                );
-            }
-            
-            // Handle horizontal movement
-            if (currentMoveInput.x != lastMoveInput.x)
-            {
-                horizontalInputTime = Time.time;
-                lastMoveInput = currentMoveInput;
-            }
-            
-            float targetVelocityX = 0f;
-            if (Time.time >= horizontalInputTime + horizontalInputDelay)
-            {
-                targetVelocityX = lastMoveInput.x * stateMachine.MoveSpeed * wallClingHorizontalSpeedMultiplier;
-            }
-            
-            // Apply horizontal velocity with smooth transition
-            stateMachine.RB.linearVelocity = new Vector2(
-                Mathf.Lerp(stateMachine.RB.linearVelocity.x, targetVelocityX, 0.2f),
-                stateMachine.RB.linearVelocity.y
-            );
-        }
-
-        // Check for jump input to perform a wall jump
-        if (stateMachine.InputReader.IsJumpPressed() && !jumpHeldOnEnter)
-        {
-            stateMachine.ApplyWallJump();
-            return;
-        }
-        
-        // Update lockout: if jump is released, allow wall jump again
-        if (!stateMachine.InputReader.IsJumpPressed())
-        {
-            jumpHeldOnEnter = false;
-        }
-
-        // Check if grounded
-        if (stateMachine.IsGrounded())
-        {
-            stateMachine.JumpsRemaining = stateMachine.MaxJumps;
-            if (currentMoveInput == Vector2.zero)
-                stateMachine.SwitchState(stateMachine.IdleState);
-            else if (stateMachine.InputReader.IsRunPressed())
-                stateMachine.SwitchState(stateMachine.RunState);
-            else
-                stateMachine.SwitchState(stateMachine.WalkState);
-            return;
-        }
-
-        // Check if no longer touching the wall
+        // Check if still touching wall
         if (!stateMachine.IsTouchingWall())
         {
             stateMachine.SwitchState(stateMachine.FallState);
             return;
         }
+
+        // Get movement input
+        Vector2 moveInput = stateMachine.GetMovementInput();
         
-        // Continuously snap to wall while in this state
-        SnapToWall();
+        // Apply wall slide gravity
+        if (stateMachine.RB.linearVelocity.y < 0)
+        {
+            stateMachine.RB.linearVelocity = new Vector2(
+                stateMachine.RB.linearVelocity.x,
+                Mathf.Max(stateMachine.RB.linearVelocity.y, -stateMachine.MaxFallSpeed * 0.5f)
+            );
+        }
+        
+        // Handle wall jump input
+        if (stateMachine.InputReader.IsJumpPressed() && stateMachine.CanJump())
+        {
+            stateMachine.SwitchState(stateMachine.JumpState);
+            return;
+        }
+        
+        // Handle dash input
+        if (stateMachine.InputReader.IsDashPressed() && stateMachine.CanDash())
+        {
+            stateMachine.SwitchState(stateMachine.DashState);
+            return;
+        }
+        
+        // Handle shoot input
+        if (stateMachine.InputReader.IsShootPressed())
+        {
+            stateMachine.SwitchState(stateMachine.ShootState);
+            return;
+        }
+        
+        // Update last move input
+        lastMoveInput = moveInput;
     }
 
     public override void Exit()

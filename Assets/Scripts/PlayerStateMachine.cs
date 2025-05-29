@@ -85,17 +85,18 @@ public class PlayerStateMachine : MonoBehaviour
     [SerializeField] private float fallAcceleration = 1.5f;  // New parameter for fall acceleration
 
     [Header("Jump Settings")]
-    [SerializeField] private float jumpCooldown = 0.1f;  // Reduced from 0.67f for more responsive jumps
-    [field: SerializeField] public int MaxJumps { get; private set; } = 1;
-    public int JumpsRemaining { get; set; }
-    [field: SerializeField] public float WallJumpAngle { get; private set; } = 35f;  // Reduced from 45f for better control
-    [field: SerializeField] public float WallJumpHorizontalForce { get; private set; } = 10f;  // Adjusted for better control
+    [SerializeField] private float jumpCooldown = 0.1f;
+    [field: SerializeField] public int MaxDoubleJumps { get; private set; } = 1;  // Set in inspector
+    private int doubleJumpsRemaining = 0;  // Track remaining double jumps
+    public bool HasDoubleJumpAvailable => doubleJumpsRemaining > 0;  // Check if double jump is available
+    [field: SerializeField] public float WallJumpAngle { get; private set; } = 35f;
+    [field: SerializeField] public float WallJumpHorizontalForce { get; private set; } = 10f;
     [field: SerializeField] public float WallJumpVerticalForce { get; private set; } = 8f;
-    [field: SerializeField] public float WallJumpBufferTime { get; private set; } = 0.1f;  // New parameter for wall jump buffer
+    [field: SerializeField] public float WallJumpBufferTime { get; private set; } = 0.1f;  // Time window for buffering wall jumps
     private float lastJumpTime = 0f;
-    private float wallJumpBufferTimer = 0f;
-    private bool wallJumpBuffered = false;
-    private bool wasJumpPressed = false;  // Track previous jump button state
+    private bool wasJumpPressed = false;
+    private bool wallJumpBuffered = false;  // Track if a wall jump is buffered
+    private float wallJumpBufferTimer = 0f;  // Timer for wall jump buffer
 
     [Header("Dash Settings")]
     [field: SerializeField] public float DashDuration { get; private set; } = 0.2f;
@@ -482,7 +483,7 @@ public class PlayerStateMachine : MonoBehaviour
             currentState.Enter();
             
             // Set default values
-            JumpsRemaining = MaxJumps;
+            doubleJumpsRemaining = MaxDoubleJumps;
             airDashesRemaining = MaxAirDashes;
             
             Debug.Log("State machine initialized successfully");
@@ -521,7 +522,7 @@ public class PlayerStateMachine : MonoBehaviour
         }
         
         // Initialize jump and dash counts
-        JumpsRemaining = MaxJumps;
+        doubleJumpsRemaining = MaxDoubleJumps;
         airDashesRemaining = MaxAirDashes;
         
         // Configure physics settings to prevent falling through colliders
@@ -643,6 +644,16 @@ public class PlayerStateMachine : MonoBehaviour
         if (jumpGroundedGraceTimer > 0f)
             jumpGroundedGraceTimer -= Time.deltaTime;
 
+        // Update wall jump buffer timer
+        if (wallJumpBufferTimer > 0f)
+        {
+            wallJumpBufferTimer -= Time.deltaTime;
+            if (wallJumpBufferTimer <= 0f)
+            {
+                wallJumpBuffered = false;
+            }
+        }
+
         // Skip processing if critical components aren't initialized
         if (RB == null)
         {
@@ -655,8 +666,8 @@ public class PlayerStateMachine : MonoBehaviour
         bool isGroundedNow = IsGrounded();
         if (!wasGroundedLastFrame && isGroundedNow)
         {
-            // Landed this frame, reset jumps and air dashes
-            JumpsRemaining = MaxJumps;
+            // Landed this frame, reset double jumps and air dashes
+            ResetDoubleJumps();
             ResetAirDash();
         }
         wasGroundedLastFrame = isGroundedNow;
@@ -680,28 +691,6 @@ public class PlayerStateMachine : MonoBehaviour
             Debug.LogWarning("Current state is null, reinitializing state machine");
             InitializeStateMachine();
             return;
-        }
-
-        // Check for jump input (only on initial press)
-        bool isJumpPressed = InputReader != null && InputReader.IsJumpPressed();
-        if (isJumpPressed && !wasJumpPressed && CanJump())
-        {
-            SwitchState(JumpState);
-        }
-        wasJumpPressed = isJumpPressed;
-
-        // Update wall jump buffer
-        if (wallJumpBuffered)
-        {
-            wallJumpBufferTimer -= Time.deltaTime;
-            if (wallJumpBufferTimer <= 0f)
-            {
-                wallJumpBuffered = false;
-            }
-            else if (IsTouchingWall() && CanJump())
-            {
-                ApplyWallJump();
-            }
         }
 
         // Update current state
@@ -936,8 +925,8 @@ public class PlayerStateMachine : MonoBehaviour
         if (IsGrounded() || IsTouchingWall())
             return true;
             
-        // In air, need to have jumps remaining
-        return JumpsRemaining > 0;
+        // In air, need to have double jumps remaining and not be in jump cooldown
+        return HasDoubleJumpAvailable && Time.time >= lastJumpTime + jumpCooldown;
     }
 
     public void OnJumpStart()
@@ -945,17 +934,20 @@ public class PlayerStateMachine : MonoBehaviour
         lastJumpTime = Time.time;
         jumpGroundedGraceTimer = jumpGroundedGraceDuration;
         
-        // Only use up a jump if in the air (not grounded and not wall clinging)
+        // Only use up a double jump if in the air (not grounded and not wall clinging)
         if (!IsGrounded() && !IsTouchingWall())
         {
-            JumpsRemaining--;
-            Debug.Log($"[PlayerStateMachine] Air jump used. Jumps remaining: {JumpsRemaining}");
+            if (doubleJumpsRemaining > 0)
+            {
+                doubleJumpsRemaining--;
+                Debug.Log($"[PlayerStateMachine] Double jump used. Double jumps remaining: {doubleJumpsRemaining}");
+            }
         }
         else
         {
-            // Reset jumps when jumping from ground or wall
-            JumpsRemaining = MaxJumps;
-            Debug.Log($"[PlayerStateMachine] Ground/Wall jump. Jumps reset to: {JumpsRemaining}");
+            // Reset double jumps when jumping from ground or wall
+            doubleJumpsRemaining = MaxDoubleJumps;
+            Debug.Log($"[PlayerStateMachine] Ground/Wall jump. Double jumps reset to: {doubleJumpsRemaining}");
         }
     }
 
@@ -1091,8 +1083,8 @@ public class PlayerStateMachine : MonoBehaviour
         // Check if player has become grounded
         if (IsGrounded())
         {
-            // Reset jumps and air dashes when grounded
-            JumpsRemaining = MaxJumps;
+            // Reset double jumps and air dashes when grounded
+            doubleJumpsRemaining = MaxDoubleJumps;
             ResetAirDash();
             
             // Preserve horizontal velocity when landing
@@ -1153,6 +1145,19 @@ public class PlayerStateMachine : MonoBehaviour
         {
             wallJumpBuffered = true;
             wallJumpBufferTimer = WallJumpBufferTime;
+            Debug.Log("[PlayerStateMachine] Wall jump buffered");
         }
+    }
+
+    public bool HasBufferedWallJump()
+    {
+        return wallJumpBuffered && wallJumpBufferTimer > 0f;
+    }
+
+    // Add a new method to reset double jumps
+    public void ResetDoubleJumps()
+    {
+        doubleJumpsRemaining = MaxDoubleJumps;
+        Debug.Log($"[PlayerStateMachine] Double jumps reset to: {doubleJumpsRemaining}");
     }
 }

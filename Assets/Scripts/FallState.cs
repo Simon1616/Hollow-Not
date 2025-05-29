@@ -3,12 +3,14 @@ using UnityEngine;
 public class FallState : PlayerBaseState
 {
     private float enterTime;
+    private bool wasJumpPressed = false;
 
     public FallState(PlayerStateMachine stateMachine) : base(stateMachine) { }
 
     public override void Enter()
     {
         enterTime = Time.time;
+        wasJumpPressed = stateMachine.InputReader.IsJumpPressed();
         // Play fall animation if available
         stateMachine.SafePlayAnimation("Fall");
         
@@ -39,12 +41,14 @@ public class FallState : PlayerBaseState
             return;
         }
         
-        // Check for jump input
-        if (stateMachine.InputReader.IsJumpPressed() && stateMachine.CanJump())
+        // Check for jump input (only on initial press)
+        bool isJumpPressed = stateMachine.InputReader.IsJumpPressed();
+        if (isJumpPressed && !wasJumpPressed && stateMachine.CanJump())
         {
             stateMachine.SwitchState(stateMachine.JumpState);
             return;
         }
+        wasJumpPressed = isJumpPressed;
         
         // Check for dash input
         if (stateMachine.InputReader.IsDashPressed() && stateMachine.CanDash())

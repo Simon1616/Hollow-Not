@@ -46,8 +46,8 @@ public class ShootState : PlayerBaseState
         // If shoot button is released, transition to appropriate state
         if (!stateMachine.InputReader.IsShootPressed())
         {
-            // Allow jump out of shoot if jump pressed
-            if (stateMachine.InputReader.IsJumpPressed() && stateMachine.JumpsRemaining > 0)
+            // Allow jump out of shoot if jump pressed and can jump
+            if (stateMachine.InputReader.IsJumpPressed() && stateMachine.CanJump())
             {
                 stateMachine.SwitchState(stateMachine.JumpState);
                 return;

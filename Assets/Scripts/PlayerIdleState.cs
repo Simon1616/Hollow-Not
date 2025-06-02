@@ -51,9 +51,12 @@ public class PlayerIdleState : PlayerBaseState
         // Check for Jump input
         if (stateMachine.InputReader.IsJumpPressed())
         {
-            Debug.Log($"[IdleState] Jump pressed. IsGrounded: {stateMachine.IsGrounded()} JumpsRemaining: {stateMachine.JumpsRemaining}");
-            // Always allow jump if grounded
-            stateMachine.SwitchState(stateMachine.JumpState);
+            Debug.Log($"[IdleState] Jump pressed. IsGrounded: {stateMachine.IsGrounded()}, CanJump: {stateMachine.CanJump()}");
+            // Check if we can jump
+            if (stateMachine.CanJump())
+            {
+                stateMachine.SwitchState(stateMachine.JumpState);
+            }
             return;
         }
 

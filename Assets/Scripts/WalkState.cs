@@ -14,7 +14,9 @@ public class WalkState : PlayerBaseState
         enterTime = Time.time;
         // Play walk animation
         if (stateMachine.Animator != null)
-            stateMachine.Animator.Play("Walk");
+        {
+            stateMachine.SafePlayAnimation("Walk");
+        }
         Debug.Log($"[WalkState] Entering Walk State at {enterTime:F2}s");
         // Play walk sound if needed
         // AudioManager.Instance?.Play("WalkSound");
@@ -22,86 +24,83 @@ public class WalkState : PlayerBaseState
 
     public override void Tick(float deltaTime)
     {
-        // --- NEW: Check for loss of ground or wall contact ---
-        if (!stateMachine.IsGrounded())
-        {
-            if (stateMachine.IsTouchingWall() && stateMachine.RB.linearVelocity.y <= 0)
-            {
-                stateMachine.SwitchState(stateMachine.WallClingState);
-            }
-            else
-            {
-                stateMachine.SwitchState(stateMachine.FallState);
-            }
-            return;
-        }
-
-        // Check for Shoot input first
-        if (stateMachine.InputReader.IsShootPressed()) // Use InputReader property
-        {
-            stateMachine.SwitchState(stateMachine.ShootState);
-            return; // Exit early
-        }
-
+        // Get movement input and update facing direction
         Vector2 moveInput = stateMachine.GetMovementInput();
-
-        // Check for Dash input
-        if (stateMachine.InputReader.IsDashPressed() && stateMachine.CanDash())
+        
+        // Calculate target velocity
+        float targetVelocityX = moveInput.x * stateMachine.MoveSpeed * walkSpeedMultiplier;
+        
+        // Apply movement force
+        stateMachine.RB.AddForce(new Vector2(targetVelocityX, 0f));
+        
+        // Apply deceleration
+        Vector2 decelerationForce = stateMachine.ApplyDeceleration(stateMachine.RB.linearVelocity, true, deltaTime);
+        stateMachine.RB.AddForce(decelerationForce);
+        
+        // Clamp velocity to max speeds
+        stateMachine.ClampVelocity(stateMachine.RB);
+        
+        // Check for state transitions
+        if (stateMachine.IsGrounded())
         {
-            float direction = Mathf.Sign(moveInput.x);
-            if (direction != 0)
+            if (moveInput == Vector2.zero)
             {
-                stateMachine.StartDash(direction);
+                stateMachine.SwitchState(stateMachine.IdleState);
+                return;
+            }
+            else if (stateMachine.InputReader.IsRunPressed())
+            {
+                stateMachine.SwitchState(stateMachine.RunState);
                 return;
             }
         }
-
-        // Check for Jump input
-        if (stateMachine.InputReader.IsJumpHeld() && stateMachine.JumpsRemaining > 0 && stateMachine.CanJump())
+        else
+        {
+            // If not grounded, transition to appropriate air state
+            if (stateMachine.IsTouchingWall() && stateMachine.RB.linearVelocity.y <= 0)
+            {
+                stateMachine.SwitchState(stateMachine.WallClingState);
+                return;
+            }
+            else if (stateMachine.RB.linearVelocity.y < 0)
+            {
+                stateMachine.SwitchState(stateMachine.FallState);
+                return;
+            }
+            else if (stateMachine.RB.linearVelocity.y > 0)
+            {
+                stateMachine.SwitchState(stateMachine.JumpState);
+                return;
+            }
+        }
+        
+        // Check for dash input
+        if (stateMachine.InputReader.IsDashPressed() && stateMachine.CanDash())
+        {
+            stateMachine.SwitchState(stateMachine.DashState);
+            return;
+        }
+        
+        // Check for shoot input
+        if (stateMachine.InputReader.IsShootPressed())
+        {
+            stateMachine.SwitchState(stateMachine.ShootState);
+            return;
+        }
+        
+        // Check for jump input
+        if (stateMachine.InputReader.IsJumpPressed() && stateMachine.CanJump())
         {
             stateMachine.SwitchState(stateMachine.JumpState);
-            return; // Exit early after state switch
-        }
-
-        // Walk/Run toggle
-        if (stateMachine.InputReader.IsRunPressed()) // Use InputReader property
-        {
-            stateMachine.SwitchState(stateMachine.RunState);
             return;
         }
-
-        if (moveInput == Vector2.zero)
-        {
-            stateMachine.SwitchState(stateMachine.IdleState);
-            return;
-        }
-
-        // Apply walk movement (reduced speed, only affect horizontal velocity)
-        float targetVelocityX = moveInput.x * stateMachine.GetHorizontalSpeed(
-            stateMachine.IsGrounded(),
-            stateMachine.IsTouchingWall() && stateMachine.RB.linearVelocity.y <= 0
-        ) * walkSpeedMultiplier;
-        if (stateMachine.RB != null)
-        {
-            // Calculate deceleration force
-            float decelerationX = stateMachine.GetDecelerationX(stateMachine.IsGrounded());
-            float currentVelocityX = stateMachine.RB.linearVelocity.x;
-            float forceX = (targetVelocityX - currentVelocityX) * decelerationX;
-            
-            // Apply horizontal movement with deceleration
-            stateMachine.RB.AddForce(new Vector2(forceX, 0f));
-            
-            // Apply deceleration
-            Vector2 decelerationForce = stateMachine.ApplyDeceleration(stateMachine.RB.linearVelocity, stateMachine.IsGrounded(), deltaTime);
-            stateMachine.RB.AddForce(decelerationForce);
-        }
-
-        // Clamp velocity to max speeds
-        stateMachine.ClampVelocity(stateMachine.RB);
 
         // Update animation parameters using safe methods
-        stateMachine.SafeSetAnimatorFloat("Horizontal", moveInput.x);
-        stateMachine.SafeSetAnimatorFloat("Vertical", moveInput.y);
+        if (stateMachine.Animator != null)
+        {
+            stateMachine.SafeSetAnimatorFloat("Speed", Mathf.Abs(moveInput.x));
+            stateMachine.SafeSetAnimatorFloat("Horizontal", moveInput.x);
+        }
 
         // Debug: log duration in state
         float duration = Time.time - enterTime;

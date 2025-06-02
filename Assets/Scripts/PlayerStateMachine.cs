@@ -354,27 +354,19 @@ public class PlayerStateMachine : MonoBehaviour
             screenScaleFactor = 1f;
         }
         
-        // Get Components - do this first
-        RB = GetComponent<Rigidbody2D>();
-        if (RB != null)
-        {
-            // Configure physics settings
-            RB.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
-            RB.gravityScale = 2.2f; // Reduced from 2.5f for slightly less weighty falls
-        }
-        
-        // Initialize input reader before state creation
+        // Initialize InputReader
         InputReader = new InputReader();
-        if (InputReader == null)
-        {
-            Debug.LogError("Failed to initialize InputReader!", this);
-        }
         
-        Animator = GetComponentInChildren<Animator>();
-        if (Animator == null)
-        {
-            Debug.LogWarning("Animator component not found in children. Animations will not play.", this);
-        }
+        // Get component references
+        RB = GetComponent<Rigidbody2D>();
+        Animator = GetComponent<Animator>();
+        
+        // Initialize state registry
+        stateRegistry = new Dictionary<string, PlayerBaseState>();
+        
+        // Initialize animator parameter caches
+        existingAnimatorParameters = new HashSet<string>();
+        nonExistingAnimatorParameters = new HashSet<string>();
         
         // Check for necessary colliders/check points
         if (playerCollider == null)

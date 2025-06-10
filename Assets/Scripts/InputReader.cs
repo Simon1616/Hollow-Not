@@ -1,9 +1,59 @@
 using UnityEngine;
 
-public class InputReader
+public class InputReader : MonoBehaviour
 {
     // Consider using Unity's new Input System for more robust handling
     // For now, using the legacy Input Manager
+
+    public Vector2 Movement { get; private set; }
+    public bool IsRunPressed { get; private set; }
+    public bool IsJumpPressed { get; private set; }
+    public bool IsJumpHeld { get; private set; }
+    public bool IsDashPressed { get; private set; }
+
+    // Input buffer settings
+    private const float JUMP_BUFFER_TIME = 0.1f; // 100ms buffer for jump input
+    private float jumpBufferTimer;
+    private bool wasJumpPressed;
+
+    private void Update()
+    {
+        // Update movement input
+        float horizontal = Input.GetAxisRaw("Horizontal");
+        float vertical = Input.GetAxisRaw("Vertical");
+        Movement = new Vector2(horizontal, vertical).normalized;
+
+        // Update button states
+        IsRunPressed = Input.GetKey(KeyCode.LeftShift);
+        IsDashPressed = Input.GetKeyDown(KeyCode.LeftControl);
+
+        // Handle jump input with buffer
+        bool jumpPressed = Input.GetKeyDown(KeyCode.Space);
+        IsJumpHeld = Input.GetKey(KeyCode.Space);
+
+        if (jumpPressed)
+        {
+            jumpBufferTimer = JUMP_BUFFER_TIME;
+            wasJumpPressed = true;
+        }
+
+        if (jumpBufferTimer > 0)
+        {
+            jumpBufferTimer -= Time.deltaTime;
+            IsJumpPressed = true;
+        }
+        else
+        {
+            IsJumpPressed = false;
+        }
+
+        // Reset jump buffer if jump is released
+        if (!IsJumpHeld && wasJumpPressed)
+        {
+            wasJumpPressed = false;
+            jumpBufferTimer = 0;
+        }
+    }
 
     public Vector2 GetMovementInput()
     {
@@ -23,35 +73,11 @@ public class InputReader
         return input;
     }
 
-    public bool IsRunPressed()
-    {
-        // Use GetKey for continuous check while held
-        return Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
-    }
-
-    public bool IsJumpPressed()
-    {
-        // Use GetButtonDown for single press detection
-        return Input.GetButtonDown("Jump");
-    }
-
-    public bool IsJumpHeld()
-    {
-        // Use GetButton for continuous check while held
-        return Input.GetButton("Jump");
-    }
-
     public bool IsShootPressed()
     {
         // Use GetButtonDown for single fire per press
         // Assumes a "Fire1" button is defined (default is Left Ctrl/Mouse 0)
         return Input.GetButtonDown("Fire1");
         // If you want continuous fire while held, use GetButton("Fire1")
-    }
-
-    public bool IsDashPressed()
-    {
-        // Use right mouse click (Mouse1) for dash
-        return Input.GetMouseButtonDown(1);
     }
 }

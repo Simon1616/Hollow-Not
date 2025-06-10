@@ -1,94 +1,80 @@
 using UnityEngine;
 
-public class FallState : PlayerBaseState
+public class FallState : MovementState
 {
-    private float enterTime;
-    private bool wasJumpPressed = false;
+    private float fallStartTime;
+    private const float FALL_ACCELERATION = 20f; // 20 m/s²
+    private const float MAX_FALL_SPEED = 10f; // 10 m/s
 
-    public FallState(PlayerStateMachine stateMachine) : base(stateMachine) { }
+    public FallState(PlayerStateMachine stateMachine) : base(stateMachine)
+    {
+    }
 
     public override void Enter()
     {
-        enterTime = Time.time;
-        wasJumpPressed = stateMachine.InputReader.IsJumpPressed();
-        // Play fall animation if available
         stateMachine.SafePlayAnimation("Fall");
-        
-        #if UNITY_EDITOR || DEVELOPMENT_BUILD
-        Debug.Log($"[FallState] Entering Fall State at {enterTime:F2}s");
-        #endif
+        fallStartTime = Time.time;
+        Debug.Log($"Entered Fall State at {fallStartTime}");
     }
 
     public override void Tick(float deltaTime)
     {
+        // Apply fall acceleration
+        stateMachine.RB.AddForce(Vector2.down * FALL_ACCELERATION * stateMachine.RB.mass, ForceMode2D.Force);
+
+        // Apply movement in air
+        Vector2 moveInput = stateMachine.GetMovementInput();
+        float targetVelocityX = moveInput.x * stateMachine.AirControlSpeed;
+        
+        // Calculate acceleration force
+        float currentVelocityX = stateMachine.RB.velocity.x;
+        float velocityDifference = targetVelocityX - currentVelocityX;
+        float accelerationForce = velocityDifference * stateMachine.RB.mass * 40f; // 40 m/s² air acceleration
+        
+        // Apply force in newtons (mass * acceleration)
+        stateMachine.RB.AddForce(new Vector2(accelerationForce, 0f));
+        
         // Apply deceleration
-        Vector2 deceleration = stateMachine.ApplyDeceleration(stateMachine.RB.linearVelocity, false, deltaTime);
-        stateMachine.RB.linearVelocity += deceleration * deltaTime;
-        
-        // Clamp velocity
+        Vector2 decelerationForce = stateMachine.ApplyDeceleration(stateMachine.RB.velocity, stateMachine.IsGrounded(), deltaTime);
+        stateMachine.RB.AddForce(decelerationForce);
         stateMachine.ClampVelocity(stateMachine.RB);
-        
+
+        // Update animation parameters
+        stateMachine.SafeSetAnimatorFloat("Speed", Mathf.Abs(stateMachine.RB.velocity.x));
+        stateMachine.SafeSetAnimatorFloat("VerticalSpeed", stateMachine.RB.velocity.y);
+
         // Check for state transitions
         if (stateMachine.IsGrounded())
         {
-            stateMachine.SwitchState(stateMachine.IdleState);
-            return;
+            if (moveInput.magnitude < 0.1f)
+            {
+                stateMachine.SwitchState(stateMachine.IdleState);
+                return;
+            }
+            else if (stateMachine.InputReader.IsRunPressed)
+            {
+                stateMachine.SwitchState(stateMachine.RunState);
+                return;
+            }
+            else
+            {
+                stateMachine.SwitchState(stateMachine.WalkState);
+                return;
+            }
         }
-        
-        if (stateMachine.IsTouchingWall() && stateMachine.RB.linearVelocity.y <= 0)
+
+        // Check for wall cling
+        if (stateMachine.IsTouchingWall() && stateMachine.RB.velocity.y <= 0)
         {
             stateMachine.SwitchState(stateMachine.WallClingState);
             return;
         }
-        
-        // Check for jump input (only on initial press)
-        bool isJumpPressed = stateMachine.InputReader.IsJumpPressed();
-        if (isJumpPressed && !wasJumpPressed && stateMachine.CanJump())
-        {
-            stateMachine.SwitchState(stateMachine.JumpState);
-            return;
-        }
-        wasJumpPressed = isJumpPressed;
-        
-        // Check for dash input
-        if (stateMachine.InputReader.IsDashPressed() && stateMachine.CanDash())
-        {
-            stateMachine.SwitchState(stateMachine.DashState);
-            return;
-        }
-        
-        // Check for shoot input
-        if (stateMachine.InputReader.IsShootPressed())
-        {
-            stateMachine.SwitchState(stateMachine.ShootState);
-            return;
-        }
-        
-        // Check for movement input
-        Vector2 moveInput = stateMachine.GetMovementInput();
-        if (moveInput != Vector2.zero)
-        {
-            // Apply air control
-            float targetSpeed = moveInput.x * stateMachine.AirControlSpeed;
-            float currentSpeed = stateMachine.RB.linearVelocity.x;
-            float speedDiff = targetSpeed - currentSpeed;
-            
-            // Apply air control force
-            float airControlForce = speedDiff * 10f; // Adjust this multiplier to control air control strength
-            stateMachine.RB.linearVelocity += new Vector2(airControlForce * deltaTime, 0f);
-        }
-        
-        // Check for extreme fall speed
-        if (stateMachine.RB.linearVelocity.y < -stateMachine.MaxFallSpeed)
-        {
-            stateMachine.RB.linearVelocity = new Vector2(stateMachine.RB.linearVelocity.x, -stateMachine.MaxFallSpeed);
-        }
+
+        HandleStateTransitions();
     }
 
     public override void Exit()
     {
-        #if UNITY_EDITOR || DEVELOPMENT_BUILD
-        Debug.Log($"[FallState] Exiting Fall State after {Time.time - enterTime:F2}s");
-        #endif
+        Debug.Log($"Exited Fall State after {Time.time - fallStartTime} seconds");
     }
 }

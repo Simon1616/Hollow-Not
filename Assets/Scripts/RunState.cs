@@ -1,8 +1,9 @@
 using UnityEngine;
 
-public class RunState : PlayerBaseState
+public class RunState : MovementState
 {
-    private float enterTime;
+    private float runStartTime;
+    private const float RUN_SPEED_MULTIPLIER = 1.3f; // 130% of base speed
 
     public RunState(PlayerStateMachine stateMachine) : base(stateMachine)
     {
@@ -10,121 +11,52 @@ public class RunState : PlayerBaseState
 
     public override void Enter()
     {
-        enterTime = Time.time;
-        // Play run animation
-        if (stateMachine.Animator != null)
-        {
-            stateMachine.SafePlayAnimation("Run");
-        }
-        Debug.Log($"[RunState] Entering Run State at {enterTime:F2}s");
-        // Play run sound if needed
-        // AudioManager.Instance?.Play("RunSound");
+        stateMachine.SafePlayAnimation("Run");
+        runStartTime = Time.time;
+        Debug.Log($"Entered Run State at {runStartTime}");
     }
 
     public override void Tick(float deltaTime)
     {
-        // Get movement input and update facing direction
+        // Apply movement with run speed multiplier
         Vector2 moveInput = stateMachine.GetMovementInput();
+        float targetVelocityX = moveInput.x * stateMachine.MoveSpeed * RUN_SPEED_MULTIPLIER;
         
-        // Calculate target velocity
-        float targetVelocityX = moveInput.x * stateMachine.MoveSpeed * 1.5f; // Run is 1.5x walk speed
+        // Calculate acceleration force
+        float currentVelocityX = stateMachine.RB.velocity.x;
+        float velocityDifference = targetVelocityX - currentVelocityX;
+        float accelerationForce = velocityDifference * stateMachine.RB.mass * 50f; // 50 m/s² acceleration
         
-        // Apply movement force
-        stateMachine.RB.AddForce(new Vector2(targetVelocityX, 0f));
+        // Apply force in newtons (mass * acceleration)
+        stateMachine.RB.AddForce(new Vector2(accelerationForce, 0f));
         
         // Apply deceleration
-        Vector2 decelerationForce = stateMachine.ApplyDeceleration(stateMachine.RB.linearVelocity, true, deltaTime);
+        Vector2 decelerationForce = stateMachine.ApplyDeceleration(stateMachine.RB.velocity, stateMachine.IsGrounded(), deltaTime);
         stateMachine.RB.AddForce(decelerationForce);
-        
-        // Clamp velocity to max speeds
         stateMachine.ClampVelocity(stateMachine.RB);
-        
+
+        // Update animation parameters
+        stateMachine.SafeSetAnimatorFloat("Speed", Mathf.Abs(stateMachine.RB.velocity.x));
+        stateMachine.SafeSetAnimatorFloat("VerticalSpeed", stateMachine.RB.velocity.y);
+
         // Check for state transitions
-        if (stateMachine.IsGrounded())
+        if (moveInput.magnitude < 0.1f)
         {
-            if (moveInput == Vector2.zero)
-            {
-                stateMachine.SwitchState(stateMachine.IdleState);
-                return;
-            }
-            else if (!stateMachine.InputReader.IsRunPressed())
-            {
-                stateMachine.SwitchState(stateMachine.WalkState);
-                return;
-            }
-        }
-        else
-        {
-            // If not grounded, transition to appropriate air state
-            if (stateMachine.IsTouchingWall() && stateMachine.RB.linearVelocity.y <= 0)
-            {
-                stateMachine.SwitchState(stateMachine.WallClingState);
-                return;
-            }
-            else if (stateMachine.RB.linearVelocity.y < 0)
-            {
-                stateMachine.SwitchState(stateMachine.FallState);
-                return;
-            }
-            else if (stateMachine.RB.linearVelocity.y > 0)
-            {
-                stateMachine.SwitchState(stateMachine.JumpState);
-                return;
-            }
-        }
-        
-        // Check for dash input
-        if (stateMachine.InputReader.IsDashPressed() && stateMachine.CanDash())
-        {
-            stateMachine.SwitchState(stateMachine.DashState);
-            return;
-        }
-        
-        // Check for shoot input
-        if (stateMachine.InputReader.IsShootPressed())
-        {
-            stateMachine.SwitchState(stateMachine.ShootState);
-            return;
-        }
-        
-        // Check for jump input
-        if (stateMachine.InputReader.IsJumpPressed() && stateMachine.CanJump())
-        {
-            stateMachine.SwitchState(stateMachine.JumpState);
+            stateMachine.SwitchState(stateMachine.IdleState);
             return;
         }
 
-        // Update animation parameters using safe methods
-        if (stateMachine.Animator != null)
+        if (!stateMachine.InputReader.IsRunPressed)
         {
-            stateMachine.SafeSetAnimatorFloat("Speed", Mathf.Abs(moveInput.x));
-            stateMachine.SafeSetAnimatorFloat("Horizontal", moveInput.x);
+            stateMachine.SwitchState(stateMachine.WalkState);
+            return;
         }
 
-        // Debug: log duration in state
-        float duration = Time.time - enterTime;
-        if (duration > 0 && Mathf.FloorToInt(duration) % 2 == 0)
-        {
-            Debug.Log($"[RunState] Running for {duration:F1} seconds");
-        }
-    }
-
-    // Helper method to check if an animator parameter exists
-    private bool HasAnimatorParameter(Animator animator, string paramName)
-    {
-        foreach (AnimatorControllerParameter param in animator.parameters)
-        {
-            if (param.name == paramName)
-            {
-                return true;
-            }
-        }
-        return false;
+        HandleStateTransitions();
     }
 
     public override void Exit()
     {
-        // Optionally stop run animation or sound
-        Debug.Log($"[RunState] Exiting Run State after {Time.time - enterTime:F2}s");
+        Debug.Log($"Exited Run State after {Time.time - runStartTime} seconds");
     }
 }

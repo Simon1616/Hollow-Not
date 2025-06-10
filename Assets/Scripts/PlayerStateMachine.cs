@@ -143,11 +143,12 @@ public class PlayerStateMachine : MonoBehaviour
 
     // Wall check settings (in meters)
     [Header("Wall Check Settings")]
-    [SerializeField] private float wallCheckOffset = 0.1f; // Offset from center for wall checks
-    [SerializeField] private float wallCheckDistance = 0.05f; // Increased from 0.02f to 0.05f for larger trigger area
-    [SerializeField] private float wallCheckHeight = 0.5f; // Height range for wall checks
-    private bool isTouchingWall;
-    private int wallDirection; // 1 for right wall, -1 for left wall
+    [SerializeField] private float wallCheckDistance = 0.2f; // Distance to check for walls
+    [SerializeField] private float wallSnapDistance = 0.1f; // Distance to snap to wall
+    [SerializeField] private float wallDetachTime = 0.15f; // Time before detaching when moving away
+    private float wallDetachTimer = 0f;
+    private bool isMovingAwayFromWall = false;
+    private int currentWallDirection = 0; // 1 for right, -1 for left, 0 for none
 
     [Header("Jump Settings")]
     [SerializeField] private float jumpCooldown = 0.1f;
@@ -752,6 +753,25 @@ public class PlayerStateMachine : MonoBehaviour
             return;
         }
 
+        // Check for wall cling transitions
+        if (!IsOnSolidGround() && RB.velocity.y < 0)
+        {
+            if (CanWallCling())
+            {
+                // Snap to wall position
+                Vector2 currentPos = transform.position;
+                Vector2 targetPos = new Vector2(
+                    currentPos.x + (currentWallDirection * wallSnapDistance),
+                    currentPos.y
+                );
+                transform.position = targetPos;
+                
+                // Switch to wall cling state
+                SwitchState(WallClingState);
+                return;
+            }
+        }
+
         // Handle other state transitions
         if (currentState == null)
         {
@@ -858,55 +878,62 @@ public class PlayerStateMachine : MonoBehaviour
         return isGrounded || (Time.time - lastGroundedTime < groundCheckBufferTime);
     }
 
-    // Simple wall check (replace with your own logic)
+    // Improved wall check with better detection and buffering
     public bool IsTouchingWall()
     {
-        // Check for walls at multiple heights
-        Vector2 checkStart = transform.position;
-        bool isWallOnRight = false;
-        bool isWallOnLeft = false;
+        // Get input direction
+        Vector2 moveInput = GetMovementInput();
+        float inputDirection = Mathf.Sign(moveInput.x);
+        
+        // Only check for walls in the direction of input
+        if (inputDirection == 0) return false;
 
-        // Check at top, center, and bottom
-        float[] checkHeights = { wallCheckHeight, 0f, -wallCheckHeight };
-        foreach (float height in checkHeights)
+        // Check for wall in input direction
+        RaycastHit2D wallHit = Physics2D.Raycast(
+            transform.position,
+            new Vector2(inputDirection, 0),
+            wallCheckDistance,
+            groundLayer
+        );
+
+        // Debug visualization
+        Debug.DrawRay(
+            transform.position,
+            new Vector2(inputDirection, 0) * wallCheckDistance,
+            wallHit.collider != null ? Color.green : Color.red
+        );
+
+        if (wallHit.collider != null)
         {
-            Vector2 checkPoint = checkStart + new Vector2(0f, height);
-            
-            // Check right side
-            RaycastHit2D rightHit = Physics2D.Raycast(checkPoint, transform.right, wallCheckDistance, groundLayer);
-            if (rightHit.collider != null)
+            currentWallDirection = (int)inputDirection;
+            return true;
+        }
+
+        // If we were wall clinging, check if we're still against the wall
+        if (currentWallDirection != 0)
+        {
+            RaycastHit2D wallCheck = Physics2D.Raycast(
+                transform.position,
+                new Vector2(currentWallDirection, 0),
+                wallCheckDistance,
+                groundLayer
+            );
+
+            // Debug visualization for wall cling check
+            Debug.DrawRay(
+                transform.position,
+                new Vector2(currentWallDirection, 0) * wallCheckDistance,
+                wallCheck.collider != null ? Color.yellow : Color.red
+            );
+
+            if (wallCheck.collider == null)
             {
-                isWallOnRight = true;
+                currentWallDirection = 0;
+                return false;
             }
-            
-            // Check left side
-            RaycastHit2D leftHit = Physics2D.Raycast(checkPoint, -transform.right, wallCheckDistance, groundLayer);
-            if (leftHit.collider != null)
-            {
-                isWallOnLeft = true;
-            }
-            
-            // Debug visualization
-            Debug.DrawRay(checkPoint, transform.right * wallCheckDistance, Color.red);
-            Debug.DrawRay(checkPoint, -transform.right * wallCheckDistance, Color.red);
         }
 
-        // Update wall direction
-        if (isWallOnRight)
-        {
-            wallDirection = 1;
-        }
-        else if (isWallOnLeft)
-        {
-            wallDirection = -1;
-        }
-
-        return isWallOnRight || isWallOnLeft;
-    }
-
-    public int GetWallDirection()
-    {
-        return wallDirection;
+        return false;
     }
 
     public void ClampVelocity(Rigidbody2D rb)
@@ -1152,40 +1179,45 @@ public class PlayerStateMachine : MonoBehaviour
 
     public bool IsOnSolidGround()
     {
-        // Get the player's collider bounds
-        Bounds colliderBounds = GetComponent<Collider2D>().bounds;
-        float checkWidth = colliderBounds.size.x * 0.8f; // Use 80% of width to avoid edge cases
-        float checkStart = colliderBounds.min.x + (colliderBounds.size.x - checkWidth) * 0.5f;
-        float checkEnd = checkStart + checkWidth;
-        
-        // Number of rays to cast across the width
-        int numRays = 5;
-        float raySpacing = checkWidth / (numRays - 1);
-        
-        // Cast multiple rays across the bottom of the player
-        int groundHits = 0;
-        float groundCheckDistance = 0.1f; // Small distance to check for ground
-        
-        for (int i = 0; i < numRays; i++)
+        bool isGrounded = Physics2D.Raycast(transform.position, Vector2.down, groundCheckDistance, groundLayer);
+        Debug.Log($"Ground check: {isGrounded}, distance: {groundCheckDistance}");
+        return isGrounded;
+    }
+
+    // New method to check if player can wall cling
+    public bool CanWallCling()
+    {
+        if (IsOnSolidGround()) return false;
+
+        Vector2 moveInput = GetMovementInput();
+        float inputDirection = Mathf.Sign(moveInput.x);
+
+        // If we're not touching a wall, we can't wall cling
+        if (!IsTouchingWall()) return false;
+
+        // If we're moving away from the wall, start the detach timer
+        if (inputDirection != 0 && inputDirection != currentWallDirection)
         {
-            Vector2 rayStart = new Vector2(
-                checkStart + (raySpacing * i),
-                colliderBounds.min.y
-            );
-            
-            RaycastHit2D hit = Physics2D.Raycast(rayStart, Vector2.down, groundCheckDistance, groundLayer);
-            
-            // Debug visualization
-            Debug.DrawRay(rayStart, Vector2.down * groundCheckDistance, hit.collider != null ? Color.green : Color.red);
-            
-            if (hit.collider != null)
+            if (!isMovingAwayFromWall)
             {
-                groundHits++;
+                isMovingAwayFromWall = true;
+                wallDetachTimer = wallDetachTime;
+            }
+            else if (wallDetachTimer > 0)
+            {
+                wallDetachTimer -= Time.deltaTime;
             }
         }
-        
-        // Require at least 60% of the rays to hit ground to consider it solid ground
-        return groundHits >= (numRays * 0.6f);
+        else
+        {
+            isMovingAwayFromWall = false;
+            wallDetachTimer = 0f;
+        }
+
+        // Can't wall cling if we're moving away from wall for too long
+        if (wallDetachTimer <= 0 && isMovingAwayFromWall) return false;
+
+        return true;
     }
 }
 

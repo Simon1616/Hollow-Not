@@ -6,14 +6,11 @@ public class WallClingState : MovementState
     private const float WALL_SLIDE_SPEED = 2f; // 2 m/s
     private const float WALL_JUMP_FORCE = 6f; // 6 m/s
     private const float WALL_JUMP_HORIZONTAL_FORCE = 5f; // 5 m/s
-    private const float WALL_DETACH_BUFFER_TIME = 0.15f; // 150ms buffer before detaching
-    private const float WALL_STICK_FORCE = 2f; // Force to keep player against wall
+    private const float WALL_STICK_FORCE = 4f; // Increased for better wall sticking
     private const float WALL_SNAP_DISTANCE = 0.1f; // Distance to snap to wall
-    private const float WALL_SNAP_SPEED = 10f; // Speed to snap to wall
-    private const float GROUND_CHECK_BUFFER = 0.05f; // Small buffer for ground check
+    private const float WALL_SNAP_SPEED = 20f; // Increased for faster snapping
+    private const float WALL_DETACH_VELOCITY_THRESHOLD = 3f; // Minimum velocity to detach from wall
 
-    private float wallDetachTimer;
-    private bool isMovingAwayFromWall;
     private int wallDirection; // 1 for right wall, -1 for left wall
     private Vector2 targetWallPosition;
     private float wallCheckTimer;
@@ -27,8 +24,6 @@ public class WallClingState : MovementState
     {
         stateMachine.SafePlayAnimation("WallCling");
         wallClingStartTime = Time.time;
-        wallDetachTimer = 0f;
-        isMovingAwayFromWall = false;
         wallCheckTimer = 0f;
         wasOnGround = stateMachine.IsOnSolidGround();
 
@@ -42,10 +37,11 @@ public class WallClingState : MovementState
             currentPos.y
         );
 
-        // Reset vertical velocity
+        // Reset vertical velocity and apply initial wall stick force
         Vector2 velocity = stateMachine.RB.velocity;
         velocity.y = 0f;
         stateMachine.RB.velocity = velocity;
+        stateMachine.RB.AddForce(new Vector2(wallDirection * WALL_STICK_FORCE * stateMachine.RB.mass, 0f), ForceMode2D.Force);
 
         Debug.Log($"Entered WallCling State at {wallClingStartTime} on {(wallDirection > 0 ? "right" : "left")} wall");
     }
@@ -91,27 +87,11 @@ public class WallClingState : MovementState
             stateMachine.RB.MovePosition(newPosition);
         }
 
-        // Check if player is trying to move away from wall
-        if (inputDirection != 0 && inputDirection != wallDirection)
-        {
-            if (!isMovingAwayFromWall)
-            {
-                isMovingAwayFromWall = true;
-                wallDetachTimer = WALL_DETACH_BUFFER_TIME;
-            }
-            else if (wallDetachTimer > 0)
-            {
-                wallDetachTimer -= deltaTime;
-            }
-        }
-        else
-        {
-            isMovingAwayFromWall = false;
-            wallDetachTimer = 0f;
-        }
-
-        // Apply wall slide
-        stateMachine.RB.velocity = new Vector2(stateMachine.RB.velocity.x, -WALL_SLIDE_SPEED);
+        // Apply wall slide with smooth deceleration
+        float currentVerticalSpeed = stateMachine.RB.velocity.y;
+        float targetVerticalSpeed = -WALL_SLIDE_SPEED;
+        float newVerticalSpeed = Mathf.Lerp(currentVerticalSpeed, targetVerticalSpeed, deltaTime * 10f);
+        stateMachine.RB.velocity = new Vector2(stateMachine.RB.velocity.x, newVerticalSpeed);
 
         // Apply force to keep player against wall
         stateMachine.RB.AddForce(new Vector2(wallDirection * WALL_STICK_FORCE * stateMachine.RB.mass, 0f), ForceMode2D.Force);
@@ -129,11 +109,12 @@ public class WallClingState : MovementState
             return;
         }
 
-        // Check if we're still against the wall
-        if (!stateMachine.IsTouchingWall())
+        // Check if we should detach from wall
+        if (!stateMachine.CanWallCling())
         {
-            wallCheckTimer += deltaTime;
-            if (wallCheckTimer >= 0.1f) // Give a small buffer before detaching
+            // Check if we're moving away from wall with enough velocity
+            float horizontalVelocity = Mathf.Abs(stateMachine.RB.velocity.x);
+            if (horizontalVelocity > WALL_DETACH_VELOCITY_THRESHOLD || inputDirection == -wallDirection)
             {
                 if (stateMachine.RB.velocity.y < 0)
                 {
@@ -146,10 +127,6 @@ public class WallClingState : MovementState
                     return;
                 }
             }
-        }
-        else
-        {
-            wallCheckTimer = 0f;
         }
 
         // Update animation parameters
